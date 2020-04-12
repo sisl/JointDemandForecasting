@@ -1,6 +1,10 @@
-torch>=1.4
+pytorch>=1.4
 matplotlib>=3.0.1
 numpy>=1.14.5
 termcolor==1.1.0
 scipy==1.2.1
 tensorboard
+scikit-learn
+tqdm
+pandas
+requests
