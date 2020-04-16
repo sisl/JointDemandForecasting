@@ -5,12 +5,40 @@ import sklearn
 from sklearn.neighbors import KernelDensity
 
 def kde(x,xplot):
+    """ 
+
+    Use kernel density estimation to estimate a density. 
+
+    Args: 
+        x (np.array): (data_points,) array of data points
+        xplot (np.array): (plot_points,) array of points to plot the density over
+
+    Returns: 
+
+        (np.array): (plot_points) array of estimated density values. 
+
+    """ 
     xplot = xplot[:,np.newaxis]
     kde = KernelDensity().fit(x)
     log_dens = kde.score_samples(xplot)
     return np.exp(log_dens)
 
-def create_rnn_XY(X,Y,tw=12,scale=False):
+def create_rnn_XY(X, Y, tw=12,scale=False):
+    """ 
+    Create rnn sequences from raw inputs using the sliding window method. 
+
+    Args: 
+        X (torch tensor): (data_points, input_features) tensor of data points
+        Y (torch tensor): (data_points, output_features) tensor of labels
+        tw (int): length of each sequence (time window)
+        scale (bool): whether or not to scale the data
+
+    Returns: 
+        (torch tensor): (num_sequences, sequence_length, input_features) tensor of data input streams.
+        (torch tensor): (num_sequences, sequence_length, output_features) tensor of data labels.
+        sf (float): scale factor
+
+    """
     x_out, y_out = [], []
     L = X.shape[0]
     for i in range(L-tw):
@@ -25,6 +53,21 @@ def create_rnn_XY(X,Y,tw=12,scale=False):
         return torch.stack(x_out), torch.stack(y_out)
 
 def create_nn_XY(X,Y,tw=12,scale=False):
+    """ 
+    Create neural net datasets from raw inputs using the sliding window method. 
+
+    Args: 
+        X (torch tensor): (data_points, input_features) tensor of data points
+        Y (torch tensor): (data_points, output_features) tensor of labels
+        tw (int): length of each sequence (time window)
+        scale (bool): whether or not to scale the data
+
+    Returns: 
+        (torch tensor): (num_sequences, sequence_length) tensor of data input streams.
+        (torch tensor): (num_sequences, output_features) tensor of data labels.
+        sf (float): scale factor
+
+    """
     x_out, y_out = [], []
     L = X.shape[0]
     for i in range(L-tw):
@@ -39,6 +82,20 @@ def create_nn_XY(X,Y,tw=12,scale=False):
         return torch.stack(x_out), torch.stack(y_out)
 
 def train_test_split_rnn(X,Y,proportion_test=0.3):
+    """ 
+    Split the rnn data between training and test data, making sure there are no overlaps in the sets. 
+
+    Args: 
+        X (torch tensor): (num_sequences, sequence_length, input_features) tensor of data input streams.
+        Y (torch tensor): (num_sequences, sequence_length, output_features) tensor of data labels.
+        proportion_test (float): proportion to put in the test set
+
+    Returns: 
+        X_train (torch tensor): (num_train, sequence_length, input_features) tensor of training data input streams.
+        Y_train (torch tensor): (num_train, sequence_length, output_features) tensor of training data labels.
+        X_test (torch tensor): (num_test, sequence_length, input_features) tensor of test data input streams.
+        Y_test (torch tensor): (num_test, sequence_length, output_features) tensor of test data labels.
+    """
     n, tw, input_size  = X.shape
     
     # form test indices
@@ -61,6 +118,20 @@ def train_test_split_rnn(X,Y,proportion_test=0.3):
     return X[train_idxs,:,:], Y[train_idxs,:,:], X[test_idxs,:,:], Y[test_idxs,:,:]
     
 def train_test_split_nn(X,Y,proportion_test=0.3):
+    """ 
+    Split the nn data between training and test data, making sure there are no overlaps in the sets. 
+
+    Args: 
+        X (torch tensor): (num_sequences, sequence_length) tensor of data input streams.
+        Y (torch tensor): (num_sequences, output_features) tensor of data labels.
+        proportion_test (float): proportion to put in the test set
+
+    Returns: 
+        X_train (torch tensor): (num_train, sequence_length) tensor of training data input streams.
+        Y_train (torch tensor): (num_train, output_features) tensor of training data labels.
+        X_test (torch tensor): (num_test, sequence_length) tensor of test data input streams.
+        Y_test (torch tensor): (num_test, output_features) tensor of test data labels.
+    """
     n, tw  = X.shape
     
     # form test indices
@@ -82,6 +153,7 @@ def train_test_split_nn(X,Y,proportion_test=0.3):
     # X_train, Y_train, X_test, Y_test
     return X[train_idxs,:], Y[train_idxs,:], X[test_idxs,:], Y[test_idxs,:]
 
+"""
 def train_test_split(X,Y,proportion_test=0.3):
     n, f  = X.shape
     
@@ -93,8 +165,21 @@ def train_test_split(X,Y,proportion_test=0.3):
     
     # X_train, Y_train, X_test, Y_test
     return X[train_idxs,:], Y[train_idxs,:], X[test_idxs,:], Y[test_idxs,:]
+"""
 
 def batch(X,Y,batch_size=32):
+    """ 
+    Batches the data along the first dimension. 
+
+    Args: 
+        X (torch tensor): (num_sequences, *) tensor of data input streams.
+        Y (torch tensor): (num_sequences, *) tensor of data labels.
+        batch_size (int): batch size.
+
+    Returns: 
+        X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
+        Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
+    """
     X_batches = []
     Y_batches = []
     num_batches = int(X.shape[0]/batch_size)
@@ -105,7 +190,20 @@ def batch(X,Y,batch_size=32):
 
 def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01, loss_on_last_half=False, 
           verbose=True, weighting=None,prob=False):
-                                                        
+    """ 
+    Train a model. 
+
+    Args: 
+        model: pytorch model to train.
+        X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
+        Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
+        num_epochs (int): number of times to iterate through all batches
+        learning_rate (float): learning rate for Adam optimizer
+        loss_on_last_half (bool): if true, only apply loss to last half of each sequence
+        verbose (bool): if true, print epoch losses
+        weighting (list of floats or None): if included, relative weights on different output indices
+        prob (bool): if true, using a probabilistic model that should be trained with NLL
+    """                                                        
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     # Train the model
     for epoch in range(num_epochs):
@@ -131,11 +229,33 @@ def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01, loss_o
         print ("Learning finished!")
     
 def MAPELoss(output, target, offset=None):
+    """ 
+    Compute MAPE Loss. 
+
+    Args: 
+        output (torch tensor): (*) tensor of model outputs.
+        target (torch tensor): (*) tensor of true data labels.
+        offset (torch tensor or None): if not None, applies offset to output and targets.
+
+    Returns: 
+        (float): MAPE loss
+    """
     if offset is not None:
         return torch.mean(torch.abs((target - output) / (target+offset))), torch.std(torch.abs((target - output) / (target+offset)))
     return torch.mean(torch.abs((target - output) / target)), torch.std(torch.abs((target - output) / target))   
 
 def MSELoss(output, target, weighting=None):
+    """ 
+    Compute MSE Loss. 
+
+    Args: 
+        output (torch tensor): (*, output_size) tensor of model outputs.
+        target (torch tensor): (*, output_size) tensor of true data labels.
+        weighting (list of floats or None): if not None, applies relative weighting over output dimension.
+
+    Returns: 
+        (float): MSE loss
+    """
     mse = torch.nn.MSELoss()
     
     # MSE
@@ -155,6 +275,16 @@ def MSELoss(output, target, weighting=None):
     return loss
 
 def NLL(output, target):
+    """ 
+    Compute negative log likelihood of targets given Gaussians paramaterized by output. 
+
+    Args: 
+        output (torch tensor): (*, 2*output_size) tensor of model output mean and standard deviations.
+        target (torch tensor): (*, output_size) tensor of true data labels.
+
+    Returns: 
+        (float): negative log likelihood
+    """
     outdims = output.shape[-1]
     axes = len(output.shape)
     output = output.transpose(0,axes-1)
@@ -165,15 +295,38 @@ def NLL(output, target):
     return loss
 
 def RMSE(output,target):
+    """ 
+    Compute root mean squared error. 
+
+    Args: 
+        output (torch tensor): (*, output_size) tensor of model outputs.
+        target (torch tensor): (*, output_size) tensor of true data labels.
+
+    Returns: 
+        (float): root mean squared error.
+    """
     return MSELoss(output,target)**0.5
 
+"""
 def RWSE(output,target):
     outdims = output.shape[-1]
     mu, sig = output[:outdims//2], output[outdims//2:]
     gaussian = torch.distributions.normal.Normal(mu,sig)
     return 0
+"""
 
 def test(model, X_test, Y_test, last_only=True, residuals=False, nn=False):
+    """ 
+    Test model on test set. 
+
+    Args: 
+        model: pytorch model being tested.
+        X_test (torch tensor): (test_sequences, sequence_length, *) tensor input data.
+        Y_test (torch tensor): (test_sequences, *, output_size) tensor data labels.
+        last_only (bool): if true, only compute loss on last element in sequences.
+        residuals (bool): if true, test labels are residuals from previous points.
+        nn (bool): if true, testing a feedforward neural network, otherwise an rnn.
+    """
     with torch.no_grad():
         forward = model(X_test) 
     
@@ -221,6 +374,14 @@ def test(model, X_test, Y_test, last_only=True, residuals=False, nn=False):
     print("overall mape loss: %1.3f" %(np.array(mape).mean()))
     
 def test_naive(X_test, Y_test, last_only=True):
+    """ 
+    Test a naive model on test set (predict next point = last point). 
+
+    Args: 
+        X_test (torch tensor): (test_sequences, sequence_length, *) tensor input data.
+        Y_test (torch tensor): (test_sequences, *, output_size) tensor data labels.
+        last_only (bool): if true, only compute loss on last element in sequences.
+    """
     forward = X_test[:,:,[0]]
     targets = Y_test[:,:,[0]]
     
