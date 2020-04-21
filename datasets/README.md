@@ -17,3 +17,14 @@ It can then be processed by editing and running:
 ```
 python3 process_openEI.py
 ```
+
+## Interaction data
+Assuming the `datasets` folder is the current working directory, the `OpenEI` dataset can be obtained by running the following command:
+```
+python3 download_interaction.py
+```
+
+It can then be processed by running:
+```
+python3 process_interaction.py
+```
