@@ -19,7 +19,7 @@ python3 process_openEI.py
 ```
 
 ## Interaction data
-Assuming the `datasets` folder is the current working directory, the `OpenEI` dataset can be obtained by running the following command:
+Assuming the `datasets` folder is the current working directory, the `Interaction` dataset can be obtained by running the following command:
 ```
 python3 download_interaction.py
 ```
