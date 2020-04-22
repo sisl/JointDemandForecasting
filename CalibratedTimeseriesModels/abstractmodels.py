@@ -61,10 +61,9 @@ class ExplicitPredictiveModel(nn.Module):
 		Args:
 			y (torch.tensor): (B,T,ydim) observations
 			u (torch.tensor or None): (B,T,udim) inputs
-			nsamps (int): number of samples
 			K (int): horizon to predict 
 		Returns:
-			dist (PredictiveDistribution): predictive distribution over next K observations
+			dist (PredictiveDistribution): predictive distribution over next K observations shaped (B,K,ydim)
 		"""
 		raise NotImplementedError
 
