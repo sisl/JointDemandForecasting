@@ -23,6 +23,20 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         self._cov_chol = nn.Parameter(cov.cholesky())
         self._ydim = len(drift)
 
+    def forward_mu(self, y, u, K):
+        B,_,ydim = y.shape
+
+        drift = self._drift
+        ydim = self._ydim
+
+        t = torch.sqrt(torch.arange(K,dtype=torch.get_default_dtype())+1.)
+
+        mu = (t.unsqueeze(1) * drift.unsqueeze(0)).unsqueeze(0) 
+        mu = mu + y[:,-1:]
+        mu = mu.reshape(B,ydim*K) 
+
+        return mu 
+
     def forward(self, y, u, K):
         """
         Predicts distribution over next K observations.
@@ -36,15 +50,10 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         B,_,ydim = y.shape
 
-        drift = self._drift
+        mu = self.forward_mu(y, u, K)
+
         cov_chol = self._cov_chol
         ydim = self._ydim
-
-        t = torch.sqrt(torch.arange(K,dtype=torch.get_default_dtype())+1.)
-
-        mu = (t.unsqueeze(1) * drift.unsqueeze(0)).unsqueeze(0) 
-        mu = mu + y[:,-1:]
-        mu = mu.reshape(B,ydim*K)   
         
         timematrix = torch.tril(torch.ones(K,K))
 
@@ -57,3 +66,4 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         dist = mvn(loc=mu, scale_tril=Sig_chol)
 
         return dist
+
