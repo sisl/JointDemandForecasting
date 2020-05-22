@@ -15,7 +15,7 @@ def main():
 
 	dat = torch.load('datasets/gauss_rw.data')
 	t = dat['t']
-	y = dat['x']
+	y = dat['y']
 
 	dataset = TimeseriesDataset(t,y,20)
 
@@ -31,8 +31,8 @@ def main():
 	model = GaussianRandomWalkModel(torch.tensor([0.,0.]),
 			torch.eye(2))
 
-	# dist = model(y_inp, None, 20)
-	# y_out_pred = dist.sample().reshape(y_out.shape).detach()
+	dist = model(y_inp, None, 20)
+	y_out_pred = dist.sample().reshape(y_out.shape).detach()
 
 	# y_out_pred = model(y_inp, None, 1, 20)[0]
 

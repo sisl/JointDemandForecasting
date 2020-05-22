@@ -12,7 +12,7 @@ def main():
 
     x0 = torch.randn(1000,2)
 
-    cov = torch.tensor([[1., 0.25],[0.25, 0.5]])
+    cov = 0.1 * torch.tensor([[1., 0.25],[0.25, 0.5]])
     mu = torch.zeros(2)
 
     dist = mvn(mu, cov)
@@ -29,7 +29,7 @@ def main():
     xs = xs.detach()
     t = torch.arange(T).unsqueeze(0).repeat(1000,1)
 
-    torch.save({'t': t, 'x': xs}, 'datasets/gauss_rw.data')
+    torch.save({'t': t, 'y': xs}, 'datasets/gauss_rw.data')
 
     import matplotlib.pyplot as plt
 

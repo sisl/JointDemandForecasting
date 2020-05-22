@@ -9,7 +9,7 @@ def main():
 
 	dat = torch.load('datasets/gauss_rw.data')
 	t = dat['t']
-	y = dat['x']
+	y = dat['y']
 
 	dataset = TimeseriesDataset(t,y,20)
 
