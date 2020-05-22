@@ -46,6 +46,10 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
             K (int): horizon to predict 
         Returns:
             dist (PredictiveDistribution): predictive distribution over next K observations shaped (B,K*ydim)
+        Notes:
+            We've basically just extended 1D Brownian motion to N-D using
+            the cholesky of the covariance matrix. 
+            See Eqn 6.5: http://statweb.stanford.edu/~owen/mc/Ch-processes.pdf
         """
 
         B,_,ydim = y.shape
@@ -67,3 +71,36 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         return dist
 
+class GenerativeGRWModel(GaussianRandomWalkModel, GenerativePredictiveModel):
+
+    def __init__(self, drift, cov):
+        """
+        Args:
+            drift (torch.tensor): (xdim,) RW drift
+            cov (torch.tensor): (xdim, xdim) RW covariance
+        """
+
+        super().__init__(drift, cov)
+
+    def forward(self, y, u, nsamps, K):
+        """
+        Samples from predictive distribution over next K observations.
+        Args:
+            y (torch.tensor): (B,T,ydim) observations
+            u (torch.tensor or None): (B,T,udim) inputs
+            nsamps (int): number of samples
+            K (int): horizon to predict 
+        Returns:
+            ypredsamps (torch.tensor): (nsamps,B,K,ydim) samples of predicted observations
+        """
+
+        # Note: this method is slower than it could be because
+        # we are instantiating a GP every time we sample. However
+        # this is good for subclasses where we override the mean function.
+
+        B, _ ,ydim = y.shape
+
+        dist = super().forward(y,u,K)
+        ypredsamps = dist.sample((nsamps,)).reshape(nsamps,B,K,ydim)
+
+        return ypredsamps

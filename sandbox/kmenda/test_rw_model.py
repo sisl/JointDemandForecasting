@@ -1,4 +1,4 @@
-from CalibratedTimeseriesModels.models.grw import GaussianRandomWalkModel
+from CalibratedTimeseriesModels.models.grw import *
 import torch
 
 from CalibratedTimeseriesModels.dataset import TimeseriesDataset
@@ -26,12 +26,13 @@ def main():
 
 	t_inp, y_inp, t_out, y_out = train_d[:]
 
-	model = GaussianRandomWalkModel(torch.tensor([0.,0.]),
+	model = GenerativeGRWModel(torch.tensor([0.,0.]),
 			torch.eye(2))
 
-	dist = model.forward(y_inp, None, 20)
+	# dist = model(y_inp, None, 20)
+	# y_out_pred = dist.sample().reshape(y_out.shape).detach()
 
-	y_out_pred = dist.sample().reshape(y_out.shape).detach()
+	y_out_pred = model(y_inp, None, 1, 20)[0]
 
 	plt.subplot(2,1,1)
 	plt.plot(t_inp[0], y_inp[...,0].T)
