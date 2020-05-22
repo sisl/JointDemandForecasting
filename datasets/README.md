@@ -43,6 +43,6 @@ Load as follows:
 ```
 data = torch.load('datasets/gauss_rw.data')
 t = data['t'] # (1000, 100) torch.tensor
-x = data['x'] # (1000, 100, 2) torch.tensor
+x = data['y'] # (1000, 100, 2) torch.tensor
 ```
 
