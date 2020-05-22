@@ -3,6 +3,8 @@ import torch
 
 from CalibratedTimeseriesModels.dataset import TimeseriesDataset
 
+from CalibratedTimeseriesModels.evaluators import ExplicitEvaluator
+
 from torch.utils import data
 
 import matplotlib.pyplot as plt
@@ -26,13 +28,17 @@ def main():
 
 	t_inp, y_inp, t_out, y_out = train_d[:]
 
-	model = GenerativeGRWModel(torch.tensor([0.,0.]),
+	model = GaussianRandomWalkModel(torch.tensor([0.,0.]),
 			torch.eye(2))
 
 	# dist = model(y_inp, None, 20)
 	# y_out_pred = dist.sample().reshape(y_out.shape).detach()
 
-	y_out_pred = model(y_inp, None, 1, 20)[0]
+	# y_out_pred = model(y_inp, None, 1, 20)[0]
+
+	evaluator = ExplicitEvaluator()
+
+	metrics = evaluator(model, test_d)
 
 	plt.subplot(2,1,1)
 	plt.plot(t_inp[0], y_inp[...,0].T)
