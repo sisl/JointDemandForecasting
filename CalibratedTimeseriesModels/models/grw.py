@@ -28,7 +28,7 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         Compute mean function of GRW
         Args:
             y (torch.tensor): (B,T,ydim) observations
-            u (torch.tensor or None): (B,T,udim) inputs
+            u (torch.tensor or None): (B,T+K,udim) inputs
             K (int): horizon to predict 
         Returns:
             mu (torch.tensor): (B, K, ydim) mean estimates 
@@ -52,7 +52,7 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         Compute mean function of GRW
         Args:
             y (torch.tensor): (B,T,ydim) observations
-            u (torch.tensor or None): (B,T,udim) inputs
+            u (torch.tensor or None): (B,T+K,udim) inputs
             K (int): horizon to predict 
         Returns:
             cov_chol (torch.tensor): (B, K, ydim, ydim) mean estimates 
@@ -68,7 +68,7 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         Predicts distribution over next K observations.
         Args:
             y (torch.tensor): (B,T,ydim) observations
-            u (torch.tensor or None): (B,T,udim) inputs
+            u (torch.tensor or None): (B,T+K,udim) inputs
             K (int): horizon to predict 
         Returns:
             dist (PredictiveDistribution): predictive distribution over next K observations shaped (B,K*ydim)
@@ -114,7 +114,7 @@ class GenerativeGRWModel(GaussianRandomWalkModel, GenerativePredictiveModel):
         Samples from predictive distribution over next K observations.
         Args:
             y (torch.tensor): (B,T,ydim) observations
-            u (torch.tensor or None): (B,T,udim) inputs
+            u (torch.tensor or None): (B,T+K,udim) inputs
             nsamps (int): number of samples
             K (int): horizon to predict 
         Returns:

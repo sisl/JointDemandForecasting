@@ -40,7 +40,7 @@ class GenerativePredictiveModel(nn.Module):
 		Samples from predictive distribution over next K observations.
 		Args:
 			y (torch.tensor): (B,T,ydim) observations
-			u (torch.tensor or None): (B,T,udim) inputs
+			u (torch.tensor or None): (B,T+K,udim) inputs
 			nsamps (int): number of samples
 			K (int): horizon to predict 
 		Returns:
@@ -65,7 +65,7 @@ class ExplicitPredictiveModel(nn.Module):
 		Predicts distribution over next K observations.
 		Args:
 			y (torch.tensor): (B,T,ydim) observations
-			u (torch.tensor or None): (B,T,udim) inputs
+			u (torch.tensor or None): (B,T+K,udim) inputs
 			K (int): horizon to predict 
 		Returns:
 			dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations shaped
