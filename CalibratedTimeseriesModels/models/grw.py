@@ -92,6 +92,9 @@ class GenerativeGRWModel(GaussianRandomWalkModel, GenerativePredictiveModel):
         """
         super().__init__(drift, cov)
 
+    def dist(self, y, u, K):
+        return super().forward(y,u,K)
+
     def forward(self, y, u, nsamps, K):
         """
         Samples from predictive distribution over next K observations.
@@ -110,7 +113,8 @@ class GenerativeGRWModel(GaussianRandomWalkModel, GenerativePredictiveModel):
 
         B, _ ,ydim = y.shape
 
-        dist = super().forward(y,u,K)
+        dist = self.dist(y,u,K)
         ypredsamps = dist.sample((nsamps,)).reshape(nsamps,B,K,ydim)
 
         return ypredsamps
+

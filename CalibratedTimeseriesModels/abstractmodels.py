@@ -48,6 +48,11 @@ class GenerativePredictiveModel(nn.Module):
 		"""
 		raise NotImplementedError
 
+	def sample(self, y, u, nsamps, K, **kwargs):
+		# method to distinguish forward for GenerativePredictiveModel 
+		# and ExplictPredictiveModel
+		return self(y, u, nsamps, K, **kwargs)
+
 
 class ExplicitPredictiveModel(nn.Module):
 
@@ -66,5 +71,11 @@ class ExplicitPredictiveModel(nn.Module):
 			dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations shaped
 		"""
 		raise NotImplementedError
+
+	def dist(self, y, u, K, **kwargs):
+		# method to distinguish forward for GenerativePredictiveModel 
+		# and ExplictPredictiveModel
+		return self(y, u, K, **kwargs)
+
 
 
