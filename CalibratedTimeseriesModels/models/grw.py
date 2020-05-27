@@ -24,6 +24,16 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         self._ydim = len(drift)
 
     def forward_mu(self, y, u, K):
+        """
+        Compute mean function of GRW
+        Args:
+            y (torch.tensor): (B,T,ydim) observations
+            u (torch.tensor or None): (B,T,udim) inputs
+            K (int): horizon to predict 
+        Returns:
+            mu (torch.tensor): (B, K, ydim) mean estimates 
+        """
+
         B,_,ydim = y.shape
 
         drift = self._drift
@@ -32,8 +42,8 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         t = torch.sqrt(torch.arange(K,dtype=torch.get_default_dtype())+1.)
 
         mu = (t.unsqueeze(1) * drift.unsqueeze(0)).unsqueeze(0) 
+        
         mu = mu + y[:,-1:]
-        mu = mu.reshape(B,ydim*K) 
 
         return mu 
 
@@ -55,6 +65,7 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         B,_,ydim = y.shape
 
         mu = self.forward_mu(y, u, K)
+        mu = mu.reshape(B,ydim*K) 
 
         cov_chol = self._cov_chol
         ydim = self._ydim
@@ -79,7 +90,6 @@ class GenerativeGRWModel(GaussianRandomWalkModel, GenerativePredictiveModel):
             drift (torch.tensor): (xdim,) RW drift
             cov (torch.tensor): (xdim, xdim) RW covariance
         """
-
         super().__init__(drift, cov)
 
     def forward(self, y, u, nsamps, K):
