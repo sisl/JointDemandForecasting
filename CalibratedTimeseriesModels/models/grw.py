@@ -49,13 +49,13 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
     def forward_cov_chol(self, y, u, K):
         """
-        Compute mean function of GRW
+        Compute cov function of GRW
         Args:
             y (torch.tensor): (B,T,ydim) observations
             u (torch.tensor or None): (B,T+K,udim) inputs
             K (int): horizon to predict 
         Returns:
-            cov_chol (torch.tensor): (B, K, ydim, ydim) mean estimates 
+            cov_chol (torch.tensor): (B, K, ydim, ydim) cov estimates 
         """
         cov_chol = self._cov_chol
         B,_,ydim = y.shape
