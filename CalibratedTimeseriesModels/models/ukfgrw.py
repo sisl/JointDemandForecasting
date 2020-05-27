@@ -66,7 +66,7 @@ class UKFGRWModel(GaussianRandomWalkModel):
 
         Wa = torch.tensor([1. - ydim/(al**2 * ka)] + [1./(2*al**2 * ka)]*(2*ydim))
         Wa = Wa.reshape(1,N,1)
-        Wc = torch.tensor([1./(2*al**2 * ka)]*(2*ydim + 1))
+        Wc = torch.tensor([2. - ydim/(al**2 * ka) - al**2 - be] + [1./(2*al**2 * ka)]*(2*ydim))
         Wc = Wc.reshape(1,N,1)
 
         for t in range(K):
