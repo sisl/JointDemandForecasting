@@ -47,6 +47,22 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         return mu 
 
+    def forward_cov_chol(self, y, u, K):
+        """
+        Compute mean function of GRW
+        Args:
+            y (torch.tensor): (B,T,ydim) observations
+            u (torch.tensor or None): (B,T,udim) inputs
+            K (int): horizon to predict 
+        Returns:
+            cov_chol (torch.tensor): (B, K, ydim, ydim) mean estimates 
+        """
+        cov_chol = self._cov_chol
+        B,_,ydim = y.shape
+
+        return cov_chol.view(1,1,ydim,ydim).expand(B,K,ydim,ydim)
+
+
     def forward(self, y, u, K):
         """
         Predicts distribution over next K observations.
@@ -67,16 +83,14 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
         mu = self.forward_mu(y, u, K)
         mu = mu.reshape(B,ydim*K) 
 
-        cov_chol = self._cov_chol
+        cov_chol = self.forward_cov_chol(y, u, K)
         ydim = self._ydim
         
         timematrix = torch.tril(torch.ones(K,K))
 
-        Sig_chol = timematrix.view(K,1,K,1) * cov_chol.view(1,ydim,1,ydim)
+        Sig_chol = timematrix.view(1,K,1,K,1) * cov_chol.transpose(1,2).unsqueeze(1)
 
-        Sig_chol = Sig_chol.reshape(K*ydim, K*ydim)
-
-        Sig_chol = Sig_chol.unsqueeze(0).expand(B,*Sig_chol.shape)
+        Sig_chol = Sig_chol.reshape(B, K*ydim, K*ydim)
 
         dist = mvn(loc=mu, scale_tril=Sig_chol)
 
