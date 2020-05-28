@@ -62,14 +62,27 @@ class UKFGRWModel(GaussianRandomWalkModel):
 
         cov_chols = []
         mus = []
-        sigma = y[:,-1:].repeat(1,N,1).view(-1,1,ydim)
+        # sigma = y[:,-1:].repeat(1,N,1).view(-1,1,ydim)
 
         Wa = torch.tensor([self._w0] + [(1.-self._w0)/(2.*ydim)]*(2*ydim))
         Wa = Wa.reshape(1,N,1)
         Wc = torch.tensor([self._w0] + [(1.-self._w0)/(2.*ydim)]*(2*ydim))
         Wc = Wc.reshape(1,N,1)
 
+        A = self._cov_chol.unsqueeze(0).repeat(B,1,1)
+
+        fac = np.sqrt(ydim / (1. - self._w0))
+        sigma = torch.cat([torch.zeros(B,1,ydim),
+                        fac*A.transpose(-2,-1),
+                       -fac*A.transpose(-2,-1)],dim=1) + y[:,-1:]
+
+        sigma = sigma.view(-1,1,ydim)
+
+        covt = (self._cov_chol @ self._cov_chol.T).unsqueeze(0)
+
         for t in range(K):
+            covt_prev = covt
+
             # propegate
             tinp = torch.tensor([t],dtype=torch.get_default_dtype())
             tinp = tinp.view(1,1).expand(B*N,1)
@@ -85,15 +98,28 @@ class UKFGRWModel(GaussianRandomWalkModel):
             yj = yj.reshape(B,N,ydim)
             mu = (Wa * yj).sum(1, keepdims=True)
             mus.append(mu)
-            yj = yj - mu
-            covt = (Wc * yj).transpose(-2,-1) @ yj + Q.unsqueeze(0)
+            yj_ = yj - mu
+            covt = (Wc * yj_).transpose(-2,-1) @ yj_ + Q.unsqueeze(0)
 
             try:
                 A = covt.cholesky()
             except RuntimeError:
                 import ipdb
                 ipdb.set_trace()
-            cov_chols.append(A)
+
+            sigma_ = sigma.view(B,N,ydim)
+            sigma_ = sigma_ - sigma_[:,0:1]
+
+            cov_tm1t = 0.5 * ((Wc * sigma_).transpose(-2,-1) @ yj_ + 
+                    (Wc * yj_).transpose(-2,-1) @ sigma_ )
+
+            cov_del = covt + covt_prev - 2 * cov_tm1t
+
+            try:
+                cov_chols.append(cov_del.cholesky())
+            except RuntimeError:
+                import ipdb
+                ipdb.set_trace()
 
             fac = np.sqrt(ydim / (1. - self._w0))
             sigma = torch.cat([torch.zeros(B,1,ydim),

@@ -29,7 +29,7 @@ def main():
 
     C = torch.randn(2, 3)
 
-    dt = 0.01
+    dt = 0.04
 
     sys = LorenzAttractor(sigma, rho, beta, C, dt, method='rk4')
 
@@ -39,7 +39,7 @@ def main():
 
     y_inp = torch.randn(1,1,n)
 
-    T = 200
+    T = 250
 
     with torch.no_grad():
         dist = model(y_inp, None, T)
