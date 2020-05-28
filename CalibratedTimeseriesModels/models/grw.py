@@ -8,6 +8,19 @@ from CalibratedTimeseriesModels.abstractmodels import *
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal as mvn
 
+import numpy as np
+
+def bfill_lowertriangle(A: torch.Tensor, vec: torch.Tensor):
+    ii, jj = np.tril_indices(A.size(-2), k=-1, m=A.size(-1))
+    A[..., ii, jj] = vec
+    return A
+
+
+def bfill_diagonal(A: torch.Tensor, vec: torch.Tensor):
+    ii, jj = np.diag_indices(min(A.size(-2), A.size(-1)))
+    A[..., ii, jj] = vec
+    return A
+
 class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
     def __init__(self, drift, cov):
@@ -19,9 +32,26 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         super().__init__()
 
-        self._drift = nn.Parameter(drift)
-        self._cov_chol = nn.Parameter(cov.cholesky())
         self._ydim = len(drift)
+        self._drift = nn.Parameter(drift)
+        
+        cov_chol = cov.cholesky()
+        self._cov_chol_logdiag = nn.Parameter(cov_chol.diag().log())
+        self._tril_inds = np.tril_indices(cov.shape[0], -1)
+        self._cov_chol_tril = nn.Parameter(cov_chol[self._tril_inds])
+
+
+    @property
+    def _cov_chol(self):
+        cov_chol_diag = self._cov_chol_logdiag.exp()
+        cov_tril = self._cov_chol_tril
+
+        cov_chol = cov_chol_diag.new_zeros(self._ydim, self._ydim)
+        cov_chol = bfill_lowertriangle(cov_chol, cov_tril)
+        cov_chol = bfill_diagonal(cov_chol, cov_chol_diag)
+
+        return cov_chol
+    
 
     def forward_mu(self, y, u, K):
         """

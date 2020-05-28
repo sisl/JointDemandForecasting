@@ -23,11 +23,16 @@ def bmm(A,b):
 
 class UKFGRWModel(GaussianRandomWalkModel):
 
-    def __init__(self, system, Q):
+    def __init__(self, system, Q, w0=1./3):
         """
         Args:
             system (nn.Module): system.step should map (t,yt,ut) -> yt+1
             Q (torch.tensor): (xdim, xdim) covariance
+        Notes:
+            https://en.wikipedia.org/wiki/Kalman_filter#Unscented_Kalman_filter
+            Implementation uses the mean set sigma points under these recommendations:
+            https://nbviewer.jupyter.org/github/sbitzer/UKF-exposed/blob/master/UKF.ipynb
+
         """
         self._ydim = Q.shape[0]
         self._xdim = Q.shape[0]
@@ -35,9 +40,7 @@ class UKFGRWModel(GaussianRandomWalkModel):
 
         self._model = system
 
-        self._alpha = 1e-3
-        self._kappa = 1.0
-        self._beta = 2.0
+        self._w0 = w0
 
     def forward_mu_cov_chol(self, y, u, K):
         """
@@ -49,13 +52,10 @@ class UKFGRWModel(GaussianRandomWalkModel):
         Returns:
             mu (torch.tensor): (B, K, ydim) mean estimates 
             cov_chol (torch.tensor): (B, K, ydim, ydim) cov estimates 
-        Notes:
-            https://en.wikipedia.org/wiki/Kalman_filter#Unscented_Kalman_filter
         """
 
 
         B,_,ydim = y.shape
-        al, ka, be = self._alpha, self._kappa, self._beta
         Q = self._cov_chol @ self._cov_chol.T
 
         N = 2*ydim + 1
@@ -64,9 +64,9 @@ class UKFGRWModel(GaussianRandomWalkModel):
         mus = []
         sigma = y[:,-1:].repeat(1,N,1).view(-1,1,ydim)
 
-        Wa = torch.tensor([1. - ydim/(al**2 * ka)] + [1./(2*al**2 * ka)]*(2*ydim))
+        Wa = torch.tensor([self._w0] + [(1.-self._w0)/(2.*ydim)]*(2*ydim))
         Wa = Wa.reshape(1,N,1)
-        Wc = torch.tensor([2. - ydim/(al**2 * ka) - al**2 - be] + [1./(2*al**2 * ka)]*(2*ydim))
+        Wc = torch.tensor([self._w0] + [(1.-self._w0)/(2.*ydim)]*(2*ydim))
         Wc = Wc.reshape(1,N,1)
 
         for t in range(K):
@@ -95,9 +95,10 @@ class UKFGRWModel(GaussianRandomWalkModel):
                 ipdb.set_trace()
             cov_chols.append(A)
 
+            fac = np.sqrt(ydim / (1. - self._w0))
             sigma = torch.cat([torch.zeros(B,1,ydim),
-                            al*np.sqrt(ka)*A.transpose(-2,-1),
-                           -al*np.sqrt(ka)*A.transpose(-2,-1)],dim=1) + mu
+                            fac*A.transpose(-2,-1),
+                           -fac*A.transpose(-2,-1)],dim=1) + mu
 
             sigma = sigma.view(-1,1,ydim)
 

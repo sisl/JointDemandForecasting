@@ -19,6 +19,8 @@ def main():
 
     torch.set_default_dtype(torch.float64)
 
+    torch.manual_seed(2)
+
     n = 3
 
     sigma = torch.tensor([10.])
@@ -27,43 +29,58 @@ def main():
 
     C = torch.randn(2, 3)
 
-    dt = 0.04
+    dt = 0.01
 
     sys = LorenzAttractor(sigma, rho, beta, C, dt, method='rk4')
 
-
-    # n = 4
-
-    # M = D = K = torch.tensor([[1., 2.], [2., 5.]])
-
-    # D = torch.eye(2) * 0.001
-
-    # dt = 0.1
-
-    # method = 'midpoint'
-
-    # sys = SpringMassDamper(M, D, K, dt, method=method)
-
+    sig = 0.05
     model = UKFGRWModel(sys,
-            0.0005*torch.eye(n))
+            sig**2 * torch.eye(n), w0=0.)
 
     y_inp = torch.randn(1,1,n)
 
-    dist = model(y_inp, None, 100)
+    T = 200
+
+    with torch.no_grad():
+        dist = model(y_inp, None, T)
 
     B = 10
-    y_out_pred = dist.sample((10,)).reshape(10,100,n).detach()
+    y_out_pred = dist.sample((B,)).reshape(B,T,n).detach()
 
-    # y_out_pred = model(y_inp, None, 1, 20)[0]
+    with torch.no_grad():
+        y0 = y_inp.repeat(B,1,1)
 
-    # evaluator = ExplicitEvaluator()
+        ys = [y0]
+        for t in range(1,T):
+            tinp = torch.tensor([[t]], dtype=torch.get_default_dtype()).repeat(B,1)
+            ny = sys.step(tinp, ys[-1]) + sig * torch.randn(B,1,n)
+            ys.append(ny)
 
-    # metrics = evaluator(model, test_d)
+        ytrue = torch.cat(ys, dim=1)
 
-    for i in range(10):
-        # plt.plot(y_out_pred[i,:,0],y_out_pred[i,:,1], alpha=0.5)
+    plt.figure(figsize = (12,6))
 
-        plt.plot(y_out_pred[i,:,0], alpha=0.5)
+    for j in range(3):
+        plt.subplot(2,3,1+j)
+        for i in range(B):
+            plt.plot(y_out_pred[i,:,j], alpha=0.5)
+            plt.ylabel(r'$x_{}$'.format(j+1))
+            plt.xlabel('Time')
+            plt.title('Sampled from UKF-GRW')
+        plt.plot(dist.loc.reshape(T,n)[:,j], linewidth=2.0, color='r')
+
+    for j in range(3):
+        plt.subplot(2,3,4+j)
+        for i in range(B):
+            plt.plot(ytrue[i,:,j], alpha=0.5)
+            plt.xlabel('Time')
+            plt.ylabel(r'$x_{}$'.format(j+1))
+            plt.title('True Simulation')
+        # plt.plot(dist.loc.reshape(T,n)[:,j], linewidth=2.0, color='r')
+
+    plt.tight_layout()
+
+    plt.savefig('./sandbox/kmenda/UKF-GRW_Lorenz.png',dpi=300)
 
     plt.show()
     
