@@ -77,7 +77,7 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         return mu 
 
-    def forward_cov_chol(self, y, u, K):
+    def forward_jac_x(self, y, u, K):
         """
         Compute cov function of GRW
         Args:
@@ -85,14 +85,14 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
             u (torch.tensor or None): (B,T+K,udim) inputs
             K (int): horizon to predict 
         Returns:
-            cov_chol (torch.tensor): (B, K, ydim, ydim) cov estimates 
+            jac_x (torch.tensor): (B, K, ydim, ydim) dynamic jacobians
         """
         cov_chol = self._cov_chol
         B,_,ydim = y.shape
 
-        return cov_chol.view(1,1,ydim,ydim).expand(B,K,ydim,ydim)
+        return torch.eye(ydim).view(1,1,ydim,ydim).expand(B,K,ydim,ydim)
 
-    def forward_mu_cov_chol(self, y, u, K):
+    def forward_mu_jac_x(self, y, u, K):
         """
         Compute mean function and cov of GRW
         Args:
@@ -101,10 +101,10 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
             K (int): horizon to predict 
         Returns:
             mu (torch.tensor): (B, K, ydim) mean estimates 
-            cov_chol (torch.tensor): (B, K, ydim, ydim) cov estimates 
+            jac_x (torch.tensor): (B, K, ydim, ydim) jacobians
         """
 
-        return self.forward_mu(y, u, K), self.forward_cov_chol(y, u, K)
+        return self.forward_mu(y, u, K), self.forward_jac_x(y, u, K)
 
 
     def forward(self, y, u, K):
@@ -124,15 +124,21 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         B,_,ydim = y.shape
 
-        mu, cov_chol = self.forward_mu_cov_chol(y, u, K)
+        mu, jac_x = self.forward_mu_jac_x(y, u, K)
         mu = mu.reshape(B,ydim*K) 
         ydim = self._ydim
         
-        timematrix = torch.tril(torch.ones(K,K))
+        cov_chol = self._cov_chol.unsqueeze(0).expand(B,ydim,ydim)
 
-        Sig_chol = timematrix.view(1,K,1,K,1) * cov_chol.transpose(1,2).unsqueeze(1)
- 
-        Sig_chol = Sig_chol.reshape(B, K*ydim, K*ydim)
+        Sig_chol = y.new_zeros(B,K*ydim,K*ydim)
+
+        for i in range(K):
+            mat = cov_chol
+            for j in range(i+1):
+                xoff = i*ydim
+                yoff = (i-j)*ydim
+                Sig_chol[:, xoff:xoff+ydim, yoff:yoff+ydim] = mat
+                mat = jac_x[:,j] @ mat
 
         dist = mvn(loc=mu, scale_tril=Sig_chol)
 
