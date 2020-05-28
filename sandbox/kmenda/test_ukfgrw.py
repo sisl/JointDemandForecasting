@@ -21,19 +21,43 @@ def main():
 
     torch.manual_seed(2)
 
-    n = 3
+    dom = 'Spring'
 
-    sigma = torch.tensor([10.])
-    rho = torch.tensor([28.])
-    beta = torch.tensor([8. / 3.])
+    # dom = 'Lorenz'
 
-    C = torch.randn(2, 3)
+    if dom == 'Spring':
 
-    dt = 0.04
+        n = 4
 
-    sys = LorenzAttractor(sigma, rho, beta, C, dt, method='rk4')
+        M = D = K = torch.tensor([[1., 2.], [2., 5.]])
 
-    sig = 0.05
+        D = torch.eye(2) * 2.0
+
+        dt = 0.1
+
+        method = 'midpoint'
+
+        sys = SpringMassDamper(M, D, K, dt, method=method)
+
+        sig = 0.01
+
+    else:
+
+        n = 3
+
+        sigma = torch.tensor([10.])
+        rho = torch.tensor([28.])
+        beta = torch.tensor([8. / 3.])
+
+        C = torch.randn(2, 3)
+
+        dt = 0.04
+
+        sys = LorenzAttractor(sigma, rho, beta, C, dt, method='rk4')
+
+        sig = 0.05
+
+
     model = UKFGRWModel(sys,
             sig**2 * torch.eye(n), w0=0.)
 
@@ -60,8 +84,8 @@ def main():
 
     plt.figure(figsize = (12,6))
 
-    for j in range(3):
-        plt.subplot(2,3,1+j)
+    for j in range(n):
+        plt.subplot(2,n,1+j)
         for i in range(B):
             plt.plot(y_out_pred[i,:,j], alpha=0.5)
             plt.ylabel(r'$x_{}$'.format(j+1))
@@ -69,8 +93,8 @@ def main():
             plt.title('Sampled from UKF-GRW')
         plt.plot(dist.loc.reshape(T,n)[:,j], linewidth=2.0, color='r')
 
-    for j in range(3):
-        plt.subplot(2,3,4+j)
+    for j in range(n):
+        plt.subplot(2,n,n+1+j)
         for i in range(B):
             plt.plot(ytrue[i,:,j], alpha=0.5)
             plt.xlabel('Time')
@@ -80,7 +104,7 @@ def main():
 
     plt.tight_layout()
 
-    plt.savefig('./sandbox/kmenda/UKF-GRW_Lorenz.png',dpi=300)
+    plt.savefig('./sandbox/kmenda/UKF-GRW_%s.png'%dom,dpi=300)
 
     plt.show()
     

@@ -132,11 +132,6 @@ class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
         Sig_chol = timematrix.view(1,K,1,K,1) * cov_chol.transpose(1,2).unsqueeze(1)
 
-        timematrix = torch.tril(torch.ones(4,4))
-        cc = self._cov_chol
-        cc[-1,0] = 1.0
-        cov_chol = torch.stack([cc * (i+1) for i in range(4)]).unsqueeze(0)
-
         Sig_chol = Sig_chol.reshape(B, K*ydim, K*ydim)
 
         dist = mvn(loc=mu, scale_tril=Sig_chol)

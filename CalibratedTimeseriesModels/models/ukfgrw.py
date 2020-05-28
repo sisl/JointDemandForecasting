@@ -108,12 +108,17 @@ class UKFGRWModel(GaussianRandomWalkModel):
                 ipdb.set_trace()
 
             sigma_ = sigma.view(B,N,ydim)
-            sigma_ = sigma_ - sigma_[:,0:1]
+            # sigma_ = sigma_ - sigma_[:,0:1]
 
-            cov_tm1t = 0.5 * ((Wc * sigma_).transpose(-2,-1) @ yj_ + 
-                    (Wc * yj_).transpose(-2,-1) @ sigma_ )
+            # cov_tm1t = 0.5 * ((Wc * sigma_).transpose(-2,-1) @ yj_ + 
+            #         (Wc * yj_).transpose(-2,-1) @ sigma_ )
 
-            cov_del = covt + covt_prev - 2 * cov_tm1t
+            # cov_del = covt + covt_prev - 2 * cov_tm1t
+
+            delta = yj - sigma_
+            delta_mu = (Wa * delta).sum(1, keepdims=True)
+            delta_ = delta - delta_mu
+            cov_del = (Wc * delta_).transpose(-2,-1) @ delta_ + Q.unsqueeze(0)
 
             try:
                 cov_chols.append(cov_del.cholesky())
