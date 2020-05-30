@@ -23,7 +23,7 @@ def main():
 
     dom = 'Spring'
 
-    # dom = 'Lorenz'
+    dom = 'Lorenz'
 
     if dom == 'Spring':
 

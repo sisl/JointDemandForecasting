@@ -8,7 +8,7 @@ GRW for nonlinear models using UKF
 
 import torch
 from torch import nn
-from CalibratedTimeseriesModels.models.grw import *
+from CalibratedTimeseriesModels.models.grw2 import *
 import numpy as np
 
 def bmm(A,b):
@@ -42,7 +42,7 @@ class UKFGRWModel(GaussianRandomWalkModel):
 
         self._w0 = w0
 
-    def forward_mu_cov_chol(self, y, u, K):
+    def forward_mu_jac_x(self, y, u, K):
         """
         Compute mean function and cov of GRW
         Args:
@@ -51,7 +51,7 @@ class UKFGRWModel(GaussianRandomWalkModel):
             K (int): horizon to predict 
         Returns:
             mu (torch.tensor): (B, K, ydim) mean estimates 
-            cov_chol (torch.tensor): (B, K, ydim, ydim) cov estimates 
+            jac_x (torch.tensor): (B, K, ydim, ydim) jacobian estimates 
         """
 
 
@@ -60,7 +60,7 @@ class UKFGRWModel(GaussianRandomWalkModel):
 
         N = 2*ydim + 1
 
-        cov_chols = []
+        jac_x = []
         mus = []
         # sigma = y[:,-1:].repeat(1,N,1).view(-1,1,ydim)
 
@@ -107,24 +107,14 @@ class UKFGRWModel(GaussianRandomWalkModel):
                 import ipdb
                 ipdb.set_trace()
 
+            # approximate jacobian using least squares
             sigma_ = sigma.view(B,N,ydim)
-            # sigma_ = sigma_ - sigma_[:,0:1]
+            X = (sigma_ - sigma_[:,0:1])[:,1:]
+            Y = yj_[:,1:]
+            Xt = X.transpose(-2,-1)
+            J = torch.solve(Xt @ Y, Xt @ X)[0]
 
-            # cov_tm1t = 0.5 * ((Wc * sigma_).transpose(-2,-1) @ yj_ + 
-            #         (Wc * yj_).transpose(-2,-1) @ sigma_ )
-
-            # cov_del = covt + covt_prev - 2 * cov_tm1t
-
-            delta = yj - sigma_
-            delta_mu = (Wa * delta).sum(1, keepdims=True)
-            delta_ = delta - delta_mu
-            cov_del = (Wc * delta_).transpose(-2,-1) @ delta_ + Q.unsqueeze(0)
-
-            try:
-                cov_chols.append(cov_del.cholesky())
-            except RuntimeError:
-                import ipdb
-                ipdb.set_trace()
+            jac_x.append(J)
 
             fac = np.sqrt(ydim / (1. - self._w0))
             sigma = torch.cat([torch.zeros(B,1,ydim),
@@ -134,6 +124,6 @@ class UKFGRWModel(GaussianRandomWalkModel):
             sigma = sigma.view(-1,1,ydim)
 
         mus = torch.cat(mus, dim=1)
-        cov_chols = torch.stack(cov_chols, dim=1)
+        jac_x = torch.stack(jac_x, dim=1)
 
-        return mus, cov_chols
+        return mus, jac_x
