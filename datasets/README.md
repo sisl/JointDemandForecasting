@@ -28,3 +28,21 @@ It can then be processed by running:
 ```
 python3 process_interaction.py
 ```
+
+## Gaussian Random Walk data
+Test dataset generated from a correlated 2D Gaussian random walk.
+Generate using:
+```
+python3 datasets/generate_randomwalk_data.py
+```
+Stored in a torch datafile:
+```
+datasets/gauss_rw.data
+```
+Load as follows:
+```
+data = torch.load('datasets/gauss_rw.data')
+t = data['t'] # (1000, 100) torch.tensor
+x = data['y'] # (1000, 100, 2) torch.tensor
+```
+
