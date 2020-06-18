@@ -5,21 +5,12 @@
 # Gaussian Random Walk model
 
 from CalibratedTimeseriesModels.abstractmodels import *
+from CalibratedTimeseriesModels.utils import *
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal as mvn
 
 import numpy as np
 
-def bfill_lowertriangle(A: torch.Tensor, vec: torch.Tensor):
-    ii, jj = np.tril_indices(A.size(-2), k=-1, m=A.size(-1))
-    A[..., ii, jj] = vec
-    return A
-
-
-def bfill_diagonal(A: torch.Tensor, vec: torch.Tensor):
-    ii, jj = np.diag_indices(min(A.size(-2), A.size(-1)))
-    A[..., ii, jj] = vec
-    return A
 
 class GaussianRandomWalkModel(ExplicitPredictiveModel):
 
