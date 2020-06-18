@@ -80,26 +80,34 @@ def encode_features(data, options):
     for i in range(n):
         
         # if not enough data to make full input/output, continue
-        if i<49 or (n-i-1)<24:
+        if i<24 or (n-i-1)<24:
             continue
         
-        x_idxs = np.concatenate((np.arange(i,i-13,-1),np.arange(i-23,i-26,-1),np.arange(i-47,i-50,-1)))
+        x_idxs = np.concatenate((np.arange(i,i-24,-1),
+                                 #np.arange(i-23,i-26,-1),
+                                 #np.arange(i-47,i-50,-1)
+                                ))
         new_x = np.concatenate((data[x_idxs,0], 
                                 one_hot(data[i,-1],12),one_hot(data[i,-2],7), one_hot(data[i,-3],24), 
                                 np.array([
-                                    data[i-24:i,0].max(),data[i-48:i-24,0].max(),
+                                    data[i-24:i,0].max(),
+                                    # data[i-48:i-24,0].max(),
                                     int(data[i,-1])-1, int(data[i,-2])-1, int(data[i,-3])-1,
                                     np.sin((data[i,-1]-1)*2*np.pi/12), np.cos((data[i,-1]-1)*2*np.pi/12),
                                     np.sin((data[i,-2]-1)*2*np.pi/7),  np.cos((data[i,-2]-1)*2*np.pi/7),
                                     np.sin((data[i,-3]-1)*2*np.pi/24), np.cos((data[i,-3]-1)*2*np.pi/24)
                                 ])))
         
-        y_idxs = i+np.array([1,2,6,12,24])
+        y_idxs = i+np.arange(1,13) #np.array([1,2,6,12,24])
         fut_y = data[y_idxs,0]
         fut_dy = fut_y - data[i,0]
         fut_max = np.array([data[i:i+24,0].max()])
         fut_dmax = fut_max - data[i,0]
-        new_y = np.concatenate((fut_y, fut_dy, fut_max, fut_dmax))
+        new_y = np.concatenate((fut_y, 
+                                #fut_dy, 
+                                #fut_max, 
+                                #fut_dmax
+                               ))
         x.append(new_x)
         y.append(new_y)
         
