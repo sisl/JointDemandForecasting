@@ -33,18 +33,20 @@ with tqdm.tqdm(total=chosenfiles) as pbar:
         filename.append(file)
         loadnum += 1
         pbar.update(1)
-X = np.vstack(Xs)
-Y = np.vstack(Ys)
+X0 = torch.tensor(np.vstack(Xs))
+Y0 = torch.tensor(np.vstack(Ys))
 
-## Save as torch tensors
+m,n = X0.shape
+m,o = Y0.shape
+X = torch.reshape(X0,(loadnum,-1,n)).double()
+Y = torch.reshape(Y0,(loadnum,-1,o)).double()
 
-X_torch = torch.tensor(X)
-Y_torch = torch.tensor(Y)
+## Save
 
 output_dir = 'processed/openEI'
 postfix = '_openei_%03d_subset_multitask.pt' %(loadnum)
 if not os.path.exists(output_dir):
         os.mkdir(output_dir)   
         
-torch.save(X_torch, os.path.join(output_dir, 'X'+postfix))
-torch.save(Y_torch, os.path.join(output_dir, 'Y'+postfix))
+torch.save(X, os.path.join(output_dir, 'X'+postfix))
+torch.save(Y, os.path.join(output_dir, 'Y'+postfix))
