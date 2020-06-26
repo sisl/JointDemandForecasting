@@ -25,3 +25,121 @@ def bmm(A,b):
         c (torch.tensor): (*,n) mvp
     """
     return (A @ b.unsqueeze(-1)).squeeze(-1)
+
+def batch(X,Y,batch_size=32):
+    """ 
+    Batches the data along the first dimension. 
+
+    Args: 
+        X (torch tensor): (num_sequences, *) tensor of data input streams.
+        Y (torch tensor): (num_sequences, *) tensor of data labels.
+        batch_size (int): batch size.
+
+    Returns: 
+        X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
+        Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
+    """
+    X_batches = []
+    Y_batches = []
+    num_batches = int(X.shape[0]/batch_size)
+    for i in range(num_batches):
+        X_batches.append(X[i*batch_size:(i+1)*batch_size])
+        Y_batches.append(Y[i*batch_size:(i+1)*batch_size])
+    return (X_batches, Y_batches)
+
+def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01,
+          verbose=True, weighting=None):
+    """ 
+    Train a model. 
+
+    Args: 
+        model: pytorch model to train.
+        X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
+        Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
+        num_epochs (int): number of times to iterate through all batches
+        learning_rate (float): learning rate for Adam optimizer
+        verbose (bool): if true, print epoch losses
+    """                                                        
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # Train the model
+    for epoch in range(num_epochs):
+        epoch_loss = 0
+        for x, y in zip(X_batches, Y_batches):
+            optimizer.zero_grad()
+            
+            dist = model(x)
+            loss, _ = nll(dist, y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()/len(X_batches)
+        if verbose:
+            print ("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
+    if verbose:
+        print ("Learning finished!")
+
+def mape(dist, target):
+    """ 
+    Compute MAPE Loss. 
+
+    Args: 
+        dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+        target (torch tensor): (B, K, ydim) tensor of true data labels.
+
+    Returns: 
+        mape (float): MAPE loss
+        mape_mean (torch.tensor): (K*ydim) MAPE along each output dimension
+        mape_std (torch.tensor): (K*ydim) std of MAPE along each output dimension
+    """
+    
+    output = dist.mean
+    target_shape = target.shape
+    target = target.reshape(*target_shape[:-2],-1)
+    mape_mean = torch.mean(torch.abs((target - output) / target), 0)
+    mape_std = torch.std(torch.abs((target - output) / target), 0)
+    mape = torch.mean(mape_mean)
+    return mape, mape_mean, mape_std
+
+def rmse(dist, target):
+    """ 
+    Compute RMSE Loss. 
+
+    Args: 
+        dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+        target (torch tensor): (B, K, ydim) tensor of true data labels.
+
+    Returns: 
+        rmse (float): RMSE loss
+        mse_mean (torch.tensor): (K*ydim) MSE along each output dimension
+        mse_std (torch.tensor): (K*ydim) std of MSE along each output dimension
+    """
+    
+    output = dist.mean
+    target_shape = target.shape
+    target = target.reshape(*target_shape[:-2],-1)
+    
+    
+    mse_mean = torch.mean((target - output)**2, 0)
+    mse_std = torch.std((target - output)**2, 0)
+    rmse = torch.mean(mse_mean)**0.5
+    return rmse, mse_mean, mse_std
+
+
+def nll(dist, target):
+    """ 
+    Compute negative log likelihood of target given distribution. 
+
+    Args: 
+        dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+        target (torch tensor): (B, K, ydim) tensor of true data labels.
+
+    Returns: 
+        nll (float): negative log likelihood
+        nlls (torch.tensor): (B) nll of each sample in batch
+    """
+    target_shape = target.shape
+    target = target.reshape(*target_shape[:-2],-1)
+    nlls = -dist.log_prob(target)
+    if len(nlls.shape) > 1:
+        nlls = torch.sum(nlls,1)
+    nll = nlls.mean()
+    return nll, nlls

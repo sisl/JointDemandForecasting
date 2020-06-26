@@ -3,6 +3,7 @@ import torch.nn as nn
 from CalibratedTimeseriesModels.abstractmodels import *
 from torch.distributions.normal import Normal as normal
 from torch.distributions.multivariate_normal import MultivariateNormal as mvnormal
+import numpy as np
 
 class GaussianNeuralNet(ExplicitPredictiveModel):
     """ 
@@ -27,7 +28,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
         self.T = input_horizon
-        self.hidden_layer_dims = hidden_layer_sizes
+        self.hidden_layer_dims = hidden_layer_dims
         self.output_dim = output_dim
         self.K = prediction_horizon
         self.full_covariance = full_covariance
@@ -39,17 +40,17 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             fc_net.append(nn.LeakyReLU())
         
         
-        self._num_means = self.output_size*self.K
+        self._num_means = self.output_dim*self.K
         if self.full_covariance:
-            n = self.output_size*self.K
-            self._num_cov = n*(n+1)/2
+            n = self.output_dim*self.K
+            self._num_cov = int(n*(n+1)/2)
         else:
-            self._num_cov = self.output_size*self.K
-        
+            self._num_cov = self.output_dim*self.K
+
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
         
-    def forward(self, y, u, K):
+    def forward(self, y, u=None, K=None):
         """ 
 
         Run a forward pass of data stream x through the neural network to predict distribution over next K observations.
@@ -61,7 +62,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
         """
         
-        B, T, ydim = y.shape()
+        B, T, ydim = y.shape
         inputs = y.reshape((B, T*ydim))
         outputs = self.fc(inputs)
         B, outdims = outputs.shape
@@ -136,17 +137,17 @@ class GaussianLSTM(ExplicitPredictiveModel):
             fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
             fc_net.append(nn.LeakyReLU())
         
-        self._num_means = self.output_size*self.K
+        self._num_means = self.output_dim*self.K
         if self.full_covariance:
-            n = self.output_size*self.K
-            self._num_cov = n*(n+1)/2
+            n = self.output_dim*self.K
+            self._num_cov = int(n*(n+1)/2)
         else:
-            self._num_cov = self.output_size*self.K
+            self._num_cov = self.output_dim*self.K
             
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_mean+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
         
-    def forward(self, y, u, K):
+    def forward(self, y, u=None, K=None):
         """ 
 
         Run a forward pass of data stream x through the neural network to predict distribution over next K observations.
