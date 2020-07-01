@@ -3,6 +3,7 @@ import torch.nn as nn
 from CalibratedTimeseriesModels.abstractmodels import *
 from torch.distributions.normal import Normal as normal
 from torch.distributions.multivariate_normal import MultivariateNormal as mvnormal
+from torch.distributions.lowrank_multivariate_normal import LowRankMultivariateNormal as lrmvnormal
 import numpy as np
 
 class GaussianNeuralNet(ExplicitPredictiveModel):
@@ -11,7 +12,8 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
     Class for probabilistic feedforward neural network using single MvGaussian. 
     
     """     
-    def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, full_covariance=False):
+    def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
+                 covariance_type='diagonal', rank=2):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -23,7 +25,8 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             hidden_layer_dims (list of ints): the hidden layer sizes in the neural network
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
-            full_covariance (bool): if true predict a full covariance matrix, otherwise a diagonal one
+            covariance_type (string): 'diagonal', 'full', or 'low-rank'
+            rank (int): rank of low-rank covariance matrix
         """ 
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -31,7 +34,8 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         self.hidden_layer_dims = hidden_layer_dims
         self.output_dim = output_dim
         self.K = prediction_horizon
-        self.full_covariance = full_covariance
+        self.covariance_type = covariance_type
+        self.rank = rank
         
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
@@ -41,11 +45,15 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         
         
         self._num_means = self.output_dim*self.K
-        if self.full_covariance:
+        if self.covariance_type == 'full':
             n = self.output_dim*self.K
             self._num_cov = int(n*(n+1)/2)
-        else:
+        elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
+        elif self.covariance_type == 'low-rank':
+            self._num_cov = self.output_dim*self.K*(self.rank+1) 
+        else:
+            raise("Invalid covariance type %s." %(self.covariance_type))
 
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
@@ -69,7 +77,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         mu = outputs[:,:self._num_means]
         
         # full covariance matrix
-        if self.full_covariance:
+        if self.covariance_type == 'full':
             diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
             offdiag = outputs[:,2*self._num_means:]
             
@@ -81,9 +89,16 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             dist = mvnormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
-        else:
+        elif self.covariance_type == 'diagonal':
             sig = nn.functional.softplus(outputs[:,self._num_means:])
             dist = normal(loc=mu, scale=sig)
+            
+        # low-rank covariance matrix
+        elif self.covariance_type == 'low-rank':
+            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
+            factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
+            dist = lrmvnormal(loc=mu, cov_factor=factor, cov_diag=diag)
+        
         return dist
     
 class GaussianLSTM(ExplicitPredictiveModel):
@@ -93,7 +108,8 @@ class GaussianLSTM(ExplicitPredictiveModel):
     
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
-                 full_covariance=False, num_layers=1, dropout=0.0, bidirectional=False, random_start=True):
+                 covariance_type='diagonal', rank=2,
+                 num_layers=1, dropout=0.0, bidirectional=False, random_start=True):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -105,7 +121,8 @@ class GaussianLSTM(ExplicitPredictiveModel):
             fc_hidden_layer_dims (list of ints): the hidden layer sizes in the neural network mapping from hidden state to output
             output_dim (int): the dimension of the outputs at each point in the sequence
             prediction_horizon (int): the prediction horizon K
-            full_covariance (bool): if true predict a full covariance matrix, otherwise a diagonal one
+            covariance_type (string): 'diagonal', 'full', or 'low-rank'
+            rank (int): rank of low-rank covariance matrix
             num_layers (int): number of layers in a possibly stacked LSTM
             dropout (float): the dropout rate of the lstm
             bidirectional (bool): whether to initialize a bidirectional lstm
@@ -119,7 +136,8 @@ class GaussianLSTM(ExplicitPredictiveModel):
         self.fc_hidden_layer_dims = fc_hidden_layer_dims
         self.output_dim = output_dim
         self.K = prediction_horizon
-        self.full_covariance = full_covariance
+        self.covariance_type = covariance_type
+        self.rank = rank
         
         # LSTM parameters
         self.num_layers = num_layers
@@ -138,11 +156,15 @@ class GaussianLSTM(ExplicitPredictiveModel):
             fc_net.append(nn.LeakyReLU())
         
         self._num_means = self.output_dim*self.K
-        if self.full_covariance:
+        if self.covariance_type == 'full':
             n = self.output_dim*self.K
             self._num_cov = int(n*(n+1)/2)
-        else:
+        elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
+        elif self.covariance_type == 'low-rank':
+            self._num_cov = self.output_dim*self.K*(self.rank+1) 
+        else:
+            raise("Invalid covariance type %s." %(self.covariance_type))
             
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_mean+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
@@ -215,7 +237,7 @@ class GaussianLSTM(ExplicitPredictiveModel):
         mu = outputs[:,:self._num_means]
         
         # full covariance matrix
-        if self.full_covariance:
+        if self.covariance_type:
             diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
             offdiag = outputs[:,2*self._num_means:]
             
@@ -227,8 +249,15 @@ class GaussianLSTM(ExplicitPredictiveModel):
             dist = mvnormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
-        else:
+        elif self.covariance_type == 'full':
             sig = nn.functional.softplus(outputs[:,self._num_means:])
             dist = normal(loc=mu, scale=sig)
+            
+        # low-rank covariance matrix
+        elif self.covariance_type == 'low-rank':
+            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
+            factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
+            dist = lrmvnormal(loc=mu, cov_factor=factor, cov_diag=diag)
+        
         return dist
         
