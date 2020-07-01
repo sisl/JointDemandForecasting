@@ -117,12 +117,35 @@ def rmse(dist, target):
     target_shape = target.shape
     target = target.reshape(*target_shape[:-2],-1)
     
-    
-    mse_mean = torch.mean((target - output)**2, 0)
-    mse_std = torch.std((target - output)**2, 0)
+    se = (target - output)**2
+    mse_mean = torch.mean(se, 0)
+    mse_std = torch.std(se, 0)
     rmse = torch.mean(mse_mean)**0.5
     return rmse, mse_mean, mse_std
 
+def rwse(dist, target, n=1000):
+    """ 
+    Compute RWSE Loss. 
+
+    Args: 
+        dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+        target (torch tensor): (B, K, ydim) tensor of true data labels.
+        n (int): number of samples to compute RWSE over
+
+    Returns: 
+        rwse (float): RWSE loss
+        wse_mean (torch.tensor): (K*ydim) WSE along each output dimension
+        wse_std (torch.tensor): (K*ydim) std of WSE along each output dimension
+    """
+    samples = dist.sample((n,))
+    target_shape = target.shape
+    target = target.reshape(1,*target_shape[:-2],-1)
+
+    se = torch.mean((target - samples)**2,0)
+    wse_mean = torch.mean(se, 0)
+    wse_std = torch.std(se, 0)
+    rwse = torch.mean(wse_mean)**0.5
+    return rwse, wse_mean, wse_std
 
 def nll(dist, target):
     """ 
