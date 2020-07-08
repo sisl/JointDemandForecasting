@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.distributions as D
 from CalibratedTimeseriesModels.abstractmodels import *
-from torch.distributions.normal import Normal as normal
-from torch.distributions.multivariate_normal import MultivariateNormal as mvnormal
-from torch.distributions.lowrank_multivariate_normal import LowRankMultivariateNormal as lrmvnormal
 import numpy as np
 
 class GaussianNeuralNet(ExplicitPredictiveModel):
@@ -13,7 +11,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2, p=0.0):
+                 covariance_type='diagonal', rank=2, dropout=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -27,7 +25,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             prediction_horizon (int): the prediction horizon K
             covariance_type (string): 'diagonal', 'full', or 'low-rank'
             rank (int): rank of low-rank covariance matrix
-            p (float): dropout probability
+            dropout (float): dropout probability
         """ 
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -37,12 +35,12 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         self.K = prediction_horizon
         self.covariance_type = covariance_type
         self.rank = rank
-        self.p = p
+        self.dropout = dropout
         
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
-            fc_net.append(nn.Dropout(p=self.p))
+            fc_net.append(nn.Dropout(p=self.dropout))
             fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
             fc_net.append(nn.LeakyReLU())
         
@@ -89,25 +87,25 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
             L[:,indices[0], indices[1]] = offdiag
             
-            dist = mvnormal(loc=mu, scale_tril=L)
+            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
             sig = torch.exp(outputs[:,self._num_means:])
-            dist = normal(loc=mu, scale=sig)
+            dist = D.Normal(loc=mu, scale=sig)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
             diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
             factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
-            dist = lrmvnormal(loc=mu, cov_factor=factor, cov_diag=diag)
+            dist = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
         
         return dist
     
 class GaussianLSTM(ExplicitPredictiveModel):
     """ 
 
-    Class for sequence-to-sequence probabilistic LSTM using single isotropic MvGaussian. 
+    Class for sequence-to-sequence probabilistic LSTM using single MvGaussian. 
     
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
@@ -249,18 +247,18 @@ class GaussianLSTM(ExplicitPredictiveModel):
             L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
             L[:,indices[0], indices[1]] = offdiag
             
-            dist = mvnormal(loc=mu, scale_tril=L)
+            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
         elif self.covariance_type == 'full':
             sig = nn.functional.softplus(outputs[:,self._num_means:])
-            dist = normal(loc=mu, scale=sig)
+            dist = D.Normal(loc=mu, scale=sig)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
             diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
             factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
-            dist = lrmvnormal(loc=mu, cov_factor=factor, cov_diag=diag)
+            dist = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
         
         return dist
         
