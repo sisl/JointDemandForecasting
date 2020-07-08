@@ -14,9 +14,9 @@ A framework for calibrating probabilistic time-series models
 ## Environment
 A conda environment for this repo can be set up and uses with:
 ```
-conda create -y --name clm python==3.7
-conda install -y --name clm -c conda-forge pytorch --file requirements.txt
-conda activate clm
+conda create -y --name ctm python==3.7
+conda install -y --name ctm -c conda-forge pytorch --file requirements.txt
+conda activate ctm
 ...
 conda deactivate
 ```
