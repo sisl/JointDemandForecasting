@@ -72,7 +72,7 @@ def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()/len(X_batches)
-        if verbose:
+        if verbose and (num_epochs < 100 or epoch % 10 == 0):
             print ("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
     if verbose:
         print ("Learning finished!")
@@ -98,6 +98,30 @@ def mape(dist, target):
     mape_std = torch.std(torch.abs((target - output) / target), 0)
     mape = torch.mean(mape_mean)
     return mape, mape_mean, mape_std
+
+def wape(dist, target, n=1000):
+    """ 
+    Compute WAPE Loss. 
+
+    Args: 
+        dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+        target (torch tensor): (B, K, ydim) tensor of true data labels.
+
+    Returns: 
+        wape (float): WAPE loss
+        wape_mean (torch.tensor): (K*ydim) WAPE along each output dimension
+        wape_std (torch.tensor): (K*ydim) std of WAPE along each output dimension
+    """
+    
+    samples = dist.sample((n,))
+    target_shape = target.shape
+    target = target.reshape(1,*target_shape[:-2],-1)  
+    
+    ape = torch.mean(torch.abs((target - samples) / target),0)
+    wape_mean = torch.mean(ape, 0)
+    wape_std = torch.std(ape, 0)
+    wape = torch.mean(wape_mean)
+    return wape, wape_mean, wape_std
 
 def rmse(dist, target):
     """ 

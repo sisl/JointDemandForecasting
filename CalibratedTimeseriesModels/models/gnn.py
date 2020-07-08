@@ -13,7 +13,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2):
+                 covariance_type='diagonal', rank=2, p=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -27,6 +27,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             prediction_horizon (int): the prediction horizon K
             covariance_type (string): 'diagonal', 'full', or 'low-rank'
             rank (int): rank of low-rank covariance matrix
+            p (float): dropout probability
         """ 
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -36,10 +37,12 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         self.K = prediction_horizon
         self.covariance_type = covariance_type
         self.rank = rank
+        self.p = p
         
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
+            fc_net.append(nn.Dropout(p=self.p))
             fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
             fc_net.append(nn.LeakyReLU())
         
@@ -78,7 +81,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         
         # full covariance matrix
         if self.covariance_type == 'full':
-            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
+            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
             offdiag = outputs[:,2*self._num_means:]
             
             L = torch.zeros(B,self._num_means,self._num_means)
@@ -90,12 +93,12 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
-            sig = nn.functional.softplus(outputs[:,self._num_means:])
+            sig = torch.exp(outputs[:,self._num_means:])
             dist = normal(loc=mu, scale=sig)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
-            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
+            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
             factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
             dist = lrmvnormal(loc=mu, cov_factor=factor, cov_diag=diag)
         
