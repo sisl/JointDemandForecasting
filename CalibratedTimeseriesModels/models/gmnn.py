@@ -93,16 +93,16 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
         
         # full covariance matrix
         if self.covariance_type == 'full':
-            raise('Full covariance matrix not yet implemented for GMM')
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
             
-            L = torch.zeros(B,self._num_means,self._num_means)
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
             indices = torch.tril_indices(self._num_means, self._num_means, -1)
-            L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            L[:,indices[0], indices[1]] = offdiag
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,indices[0], indices[1]] = offdiag
             
-            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
@@ -193,7 +193,7 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
         else:
             raise("Invalid covariance type %s." %(self.covariance_type))
             
-        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_mean+self._num_cov))
+        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=out_features=self.n_components*(1+self._num_means+self._num_cov)))
         self.fc = nn.Sequential(*fc_net)
         
     def forward(self, y, u=None, K=None):
@@ -259,32 +259,40 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
 
         """ 
         outputs = self.fc(h_n)
-        # outputs will be (B, 2*K*ydims)
-        B, outdims = fc_output.shape
-        mu = outputs[:,:self._num_means]
+        B, outdims = outputs.shape
+        
+        probs = nn.functional.softmax(outputs[:,:self.n_components],1)
+        mix = D.Categorical(probs)
+        
+        means_endidx = self.n_components*(self._num_means+1)
+        mu = outputs[:,self.n_components:means_endidx].reshape(B, self.n_components, self._num_means)
         
         # full covariance matrix
-        if self.covariance_type:
-            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
+        if self.covariance_type == 'full':
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
             
-            L = torch.zeros(B,self._num_means,self._num_means)
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
             indices = torch.tril_indices(self._num_means, self._num_means, -1)
-            L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            L[:,indices[0], indices[1]] = offdiag
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,indices[0], indices[1]] = offdiag
             
-            dist = D.Normal(loc=mu, scale_tril=L)
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
-        elif self.covariance_type == 'full':
-            sig = nn.functional.softplus(outputs[:,self._num_means:])
-            dist = D.MultivariateNormal(loc=mu, scale=sig)
+        elif self.covariance_type == 'diagonal':
+            sig = torch.exp(outputs[:,means_endidx:]).reshape(B, self.n_components, self._num_means)
+            dist = D.Normal(loc=mu, scale=sig)
+            comp = D.Independent(dist,1)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
-            diag = nn.functional.softplus(outputs[:,self._num_means:2*self._num_means])
-            factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
-            dist = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
-        
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            factor = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, self._num_means, self.rank)
+            comp = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
+                           
+        dist = D.MixtureSameFamily(mix, comp)
         return dist
         
