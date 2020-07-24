@@ -4,6 +4,8 @@
 
 import numpy as np
 import torch
+import random
+import math
 
 def bfill_lowertriangle(A: torch.Tensor, vec: torch.Tensor):
     ii, jj = np.tril_indices(A.size(-2), k=-1, m=A.size(-1))
@@ -26,6 +28,56 @@ def bmm(A,b):
     """
     return (A @ b.unsqueeze(-1)).squeeze(-1)
 
+def electric_train_test_split(X, Y, test_size=0.25, random_state=1, disp_idx=36):
+    """
+    Performs train/test split for electric dataset by avoiding overlaps in rolling windows.
+    
+    Args:
+        X (torch.tensor): (num_locs,n,in_features) tensor of inputs
+        Y (torch.tensor): (num_locs,n,out_features) tensor of corresponding outputs
+        test_size (float)
+        random_state (int): seed for the random number generator
+        disp_idx (int): index by which to displace indices to avoid test/train overlap
+    Returns:
+        X_train (torch.tensor): (num_locs,m,in_features) tensor of training inputs
+        X_test (torch.tensor): (num_locs,t,in_features) tensor of testing inputs
+        Y_train (torch.tensor): (num_locs,m,out_features) tensor of training inputs
+        Y_test (torch.tensor): (num_locs,t,out_features) tensor of testing inputs
+    """    
+    _, n, _ = X.shape
+    random.seed(random_state)
+    week_idx = 24*7
+    X_train, X_test, Y_train, Y_test = [], [], [], []
+    prev_batch_train = True
+    for i in range(math.ceil(n/week_idx)):
+        start_idx = i*week_idx
+        end_idx = min((i+1)*week_idx,n)
+        
+        # add to training
+        if random.random()>test_size:
+            
+            # if switching batch, add to start index
+            if not prev_batch_train:
+                start_idx += disp_idx
+                prev_batch_train = True
+            X_train.append(X[:,start_idx:end_idx,:])
+            Y_train.append(Y[:,start_idx:end_idx,:])
+            
+        # add to testing
+        else:
+            
+            # if switching batch, add to start index
+            if prev_batch_train:
+                start_idx += disp_idx
+                prev_batch_train = False
+            X_test.append(X[:,start_idx:end_idx,:])
+            Y_test.append(Y[:,start_idx:end_idx,:])
+    X_train = torch.cat(X_train, dim=1)
+    X_test = torch.cat(X_test, dim=1)
+    Y_train = torch.cat(Y_train, dim=1)
+    Y_test = torch.cat(Y_test, dim=1)
+    return X_train, X_test, Y_train, Y_test
+
 def batch(X,Y,batch_size=32):
     """ 
     Batches the data along the first dimension. 
@@ -47,8 +99,8 @@ def batch(X,Y,batch_size=32):
         Y_batches.append(Y[i*batch_size:(i+1)*batch_size])
     return (X_batches, Y_batches)
 
-def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01,
-          verbose=True, weighting=None):
+def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Adam,
+          learning_rate=0.01, verbose=True, weighting=None):
     """ 
     Train a model. 
 
@@ -57,10 +109,13 @@ def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01,
         X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
         Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
         num_epochs (int): number of times to iterate through all batches
+        optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
         verbose (bool): if true, print epoch losses
     """                                                        
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optimizer(model.parameters(), lr=learning_rate)
+    checkpoint = model.state_dict()
+    
     # Train the model
     for epoch in range(num_epochs):
         epoch_loss = 0
@@ -72,8 +127,15 @@ def train(model, X_batches, Y_batches, num_epochs=20, learning_rate=0.01,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()/len(X_batches)
+        if np.isnan(epoch_loss): #or epoch_loss > 10^10:
+            model.load_state_dict(checkpoint)
+            print("Training Error, re-loading checkpoint")
+            continue
+        if epoch % 2 == 0: 
+            checkpoint = model.state_dict()
         if verbose and (num_epochs < 100 or epoch % 10 == 0):
             print ("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
+            
     if verbose:
         print ("Learning finished!")
 
