@@ -12,7 +12,7 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 n_components=3, covariance_type='diagonal', rank=2, tied=False, dropout=0.0):
+                 n_components=3, covariance_type='diagonal', rank=2, bands=2, tied=False, dropout=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -25,8 +25,9 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
             n_componenets (int): number of components in the mixture model
-            covariance_type (string): 'diagonal', 'full', or 'low-rank'
+            covariance_type (string): 'diagonal', 'full', 'low-rank', or 'banded'
             rank (int): rank of low-rank covariance matrix
+            bands (int): number of off-diagonal bands in banded covariance matrix
             tied (bool): if True, predict the same covariance for each component in mixture
             dropout (float): dropout probability
         """ 
@@ -41,6 +42,7 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
             raise("Number of components = 1, use GaussianNeuralNet class")
         self.covariance_type = covariance_type
         self.rank = rank
+        self.bands = bands
         self.tied = tied
         if self.tied:
             raise("Tied covariances not yet implemented")
@@ -54,14 +56,25 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
             fc_net.append(nn.LeakyReLU())
         
         
-        self._num_means = self.output_dim*self.K
+        n = self.output_dim*self.K
+        self._num_means = n
         if self.covariance_type == 'full':
-            n = self.output_dim*self.K
             self._num_cov = int(n*(n+1)/2)
         elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
         elif self.covariance_type == 'low-rank':
             self._num_cov = self.output_dim*self.K*(self.rank+1) 
+        elif self.covariance_type == 'banded':
+            if self.bands < 1 or self.bands > self.output_dim*self.K-1:
+                raise("Invalid number of bands")
+            self._num_cov = 0
+            for i in range(self.bands+1):
+                self._num_cov += n-i
+            
+            # determine band indices
+            indices = torch.tril_indices(self._num_means, self._num_means, -1)
+            good_cols = [i for i in range(indices.shape[1]) if abs(indices[0,i]-indices[1,i]) <= self.bands]
+            self._band_indices = indices[:,good_cols]          
         else:
             raise("Invalid covariance type %s." %(self.covariance_type))
 
@@ -116,7 +129,20 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
             diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
             factor = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, self._num_means, self.rank)
             comp = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
-                           
+        
+        # banded covariance matrix
+        elif self.covariance_type == 'banded':
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
+
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,self._band_indices[0], self._band_indices[1]] = offdiag
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
+        
+        
         dist = D.MixtureSameFamily(mix, comp)
         return dist
     
@@ -182,9 +208,9 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
             fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
             fc_net.append(nn.LeakyReLU())
         
-        self._num_means = self.output_dim*self.K
+        n = self.output_dim*self.K
+        self._num_means = n
         if self.covariance_type == 'full':
-            n = self.output_dim*self.K
             self._num_cov = int(n*(n+1)/2)
         elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
@@ -193,7 +219,7 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
         else:
             raise("Invalid covariance type %s." %(self.covariance_type))
             
-        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=out_features=self.n_components*(1+self._num_means+self._num_cov)))
+        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self.n_components*(1+self._num_means+self._num_cov)))
         self.fc = nn.Sequential(*fc_net)
         
     def forward(self, y, u=None, K=None):
