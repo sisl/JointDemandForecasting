@@ -43,7 +43,7 @@ class BayesianLinearRegression(ExplicitPredictiveModel):
             dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
         """
         if self.theta is None or self.b is None or self.Sigma_chol is None:
-            raise('Yet to fit model.')
+            raise NameError('Yet to fit model.')
         
         B, T, ydim = y.shape
         X = y.reshape((B,self.T*self.input_dim))
