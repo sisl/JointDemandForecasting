@@ -78,7 +78,7 @@ def electric_train_test_split(X, Y, test_size=0.25, random_state=1, disp_idx=36)
     Y_test = torch.cat(Y_test, dim=1)
     return X_train, X_test, Y_train, Y_test
 
-def batch(X,Y,batch_size=32):
+def batch(X, Y, batch_size=32, random_state=0):
     """ 
     Batches the data along the first dimension. 
 
@@ -86,11 +86,18 @@ def batch(X,Y,batch_size=32):
         X (torch tensor): (num_sequences, *) tensor of data input streams.
         Y (torch tensor): (num_sequences, *) tensor of data labels.
         batch_size (int): batch size.
+        random_state (int): seed to set random number generator for batching data
 
     Returns: 
         X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
         Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
     """
+    n = X.shape[0]
+    torch.random.manual_seed(random_state)
+    r = torch.randperm(n)
+    X = X[r,...]
+    Y = Y[r,...]
+    
     X_batches = []
     Y_batches = []
     num_batches = int(X.shape[0]/batch_size)
@@ -139,13 +146,15 @@ def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Ad
     if verbose:
         print ("Learning finished!")
 
-def mape(dist, target):
+def mape(dist, target, sampled=False):
     """ 
     Compute MAPE Loss. 
 
     Args: 
         dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            (torch tensor): if sampled is True, dist must be a (n,B,K*ydim) tensor
         target (torch tensor): (B, K, ydim) tensor of true data labels.
+        sampled (bool): if True, dist is a tensor of samples
 
     Returns: 
         mape (float): MAPE loss
@@ -153,7 +162,11 @@ def mape(dist, target):
         mape_std (torch.tensor): (K*ydim) std of MAPE along each output dimension
     """
     
-    output = dist.mean
+    if sampled:
+        output = dist.mean(0)
+    else:
+        output = dist.mean 
+    
     target_shape = target.shape
     target = target.reshape(*target_shape[:-2],-1)
     mape_mean = torch.mean(torch.abs((target - output) / target), 0)
@@ -161,13 +174,15 @@ def mape(dist, target):
     mape = torch.mean(mape_mean)
     return mape, mape_mean, mape_std
 
-def wape(dist, target, n=1000):
+def wape(dist, target, n=1000, sampled=False):
     """ 
     Compute WAPE Loss. 
 
     Args: 
         dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            (torch tensor): if sampled is True, dist must be a (n,B,K*ydim) tensor
         target (torch tensor): (B, K, ydim) tensor of true data labels.
+        sampled (bool): if True, dist is a tensor of samples
 
     Returns: 
         wape (float): WAPE loss
@@ -175,7 +190,11 @@ def wape(dist, target, n=1000):
         wape_std (torch.tensor): (K*ydim) std of WAPE along each output dimension
     """
     
-    samples = dist.sample((n,))
+    if sampled:
+        samples = dist
+    else:
+        samples = dist.sample((n,))
+    
     target_shape = target.shape
     target = target.reshape(1,*target_shape[:-2],-1)  
     
@@ -185,13 +204,15 @@ def wape(dist, target, n=1000):
     wape = torch.mean(wape_mean)
     return wape, wape_mean, wape_std
 
-def rmse(dist, target):
+def rmse(dist, target, sampled=False):
     """ 
     Compute RMSE Loss. 
 
     Args: 
         dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            (torch tensor): if sampled is True, dist must be a (n,B,K*ydim) tensor
         target (torch tensor): (B, K, ydim) tensor of true data labels.
+        sampled (bool): if True, dist is a tensor of samples
 
     Returns: 
         rmse (float): RMSE loss
@@ -199,7 +220,10 @@ def rmse(dist, target):
         mse_std (torch.tensor): (K*ydim) std of MSE along each output dimension
     """
     
-    output = dist.mean
+    if sampled:
+        output = dist.mean(0)
+    else:
+        output = dist.mean 
     target_shape = target.shape
     target = target.reshape(*target_shape[:-2],-1)
     
@@ -209,21 +233,28 @@ def rmse(dist, target):
     rmse = torch.mean(mse_mean)**0.5
     return rmse, mse_mean, mse_std
 
-def rwse(dist, target, n=1000):
+def rwse(dist, target, n=1000, sampled=False):
     """ 
     Compute RWSE Loss. 
 
     Args: 
         dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            (torch tensor): if sampled is True, dist must be a (n,B,K*ydim) tensor
         target (torch tensor): (B, K, ydim) tensor of true data labels.
         n (int): number of samples to compute RWSE over
+        sampled (bool): if True, dist is a tensor of samples
 
     Returns: 
         rwse (float): RWSE loss
         wse_mean (torch.tensor): (K*ydim) WSE along each output dimension
         wse_std (torch.tensor): (K*ydim) std of WSE along each output dimension
     """
-    samples = dist.sample((n,))
+    
+    if sampled:
+        samples = dist
+    else:
+        samples = dist.sample((n,))
+    
     target_shape = target.shape
     target = target.reshape(1,*target_shape[:-2],-1)
 
