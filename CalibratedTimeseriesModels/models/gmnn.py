@@ -203,7 +203,7 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
                           dropout=self.dropout, bidirectional=self.bidirectional)
         
         fc_net = []
-        fc_sizes = np.append(hidden_dims, self.fc_hidden_layer_dims)
+        fc_sizes = np.append(self.hidden_dim, self.fc_hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
             fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
             fc_net.append(nn.LeakyReLU())
@@ -234,8 +234,8 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
             dist (PredictiveDistribution): (B, K*ydim) predictive distribution over next K observations
         """
         
-        h_0, c_0 = self.initialize_lstm(x)    
-        output_lstm, (h_n, c_n) = self.lstm(x, (h_0, c_0))
+        h_0, c_0 = self.initialize_lstm(y)    
+        output_lstm, (h_n, c_n) = self.lstm(y, (h_0, c_0))
         # output_lstm has shape (B, T, hidden_dim)
         
         # calculate predictions based on final hidden state
@@ -254,8 +254,8 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
 
         Returns: 
 
-            h_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_size) tensor for initial hidden state
-            c_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_size) tensor for initial cell state 
+            h_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_dim) tensor for initial hidden state
+            c_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_dim) tensor for initial cell state 
 
         """ 
         batch_index = 0
@@ -263,11 +263,11 @@ class GaussianMixtureLSTM(ExplicitPredictiveModel):
 
         # Hidden state in first seq of the LSTM - use noisy state initialization if random_start is True
         if self.random_start:
-            h_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_size)
-            c_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_size)
+            h_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
+            c_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
         else:
-            h_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_size)
-            c_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_size)
+            h_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
+            c_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
         return h_0, c_0
             
     def forward_fc(self, h_n):
