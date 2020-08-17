@@ -83,7 +83,7 @@ def encode_features(data, options):
         if i<24 or (n-i-1)<24:
             continue
         
-        x_idxs = np.concatenate((np.arange(i,i-24,-1),
+        x_idxs = np.concatenate((np.arange(i-23,i+1,1),
                                  #np.arange(i-23,i-26,-1),
                                  #np.arange(i-47,i-50,-1)
                                 ))
