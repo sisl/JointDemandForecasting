@@ -8,3 +8,5 @@ scikit-learn
 tqdm
 pandas
 requests
+gpytorch>=1.1
+

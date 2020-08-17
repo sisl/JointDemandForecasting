@@ -193,7 +193,7 @@ def wape(dist, target, n=1000, sampled=False):
     if sampled:
         samples = dist
     else:
-        samples = dist.sample((n,))
+        samples = dist.sample(torch.Size([n]))
     
     target_shape = target.shape
     target = target.reshape(1,*target_shape[:-2],-1)  
@@ -253,7 +253,7 @@ def rwse(dist, target, n=1000, sampled=False):
     if sampled:
         samples = dist
     else:
-        samples = dist.sample((n,))
+        samples = dist.sample(torch.Size([n]))
     
     target_shape = target.shape
     target = target.reshape(1,*target_shape[:-2],-1)
