@@ -11,7 +11,8 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0):
+                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0,
+                 random_state=None):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -27,6 +28,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             rank (int): rank of low-rank covariance matrix
             bands (int): number of off-diagonal bands in banded covariance matrix
             dropout (float): dropout probability
+            random_state (int): seed to manually set RNG
         """ 
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -38,7 +40,10 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         self.rank = rank
         self.bands = bands
         self.dropout = dropout
-        
+        self.random_state = random_state
+        if random_state is not None:
+            torch.manual_seed(self.random_state)
+            
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
@@ -132,7 +137,8 @@ class GaussianLSTM(ExplicitPredictiveModel):
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
                  covariance_type='diagonal', rank=2, bands=2,
-                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False):
+                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False,
+                 random_state=None):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -151,6 +157,7 @@ class GaussianLSTM(ExplicitPredictiveModel):
             dropout (float): the dropout rate of the lstm
             bidirectional (bool): whether to initialize a bidirectional lstm
             random_start (bool): If true, will initialize the hidden states randomly from a unit Gaussian
+            random_state (int): seed to manually set RNG
         """ 
         super(GaussianLSTM, self).__init__()
         
@@ -169,6 +176,9 @@ class GaussianLSTM(ExplicitPredictiveModel):
         self.dropout = dropout
         self.bidirectional = bidirectional
         self.random_start = random_start
+        self.random_state = random_state
+        if random_state is not None:
+            torch.manual_seed(self.random_state)
             
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
                           num_layers=self.num_layers, batch_first=True,
@@ -238,14 +248,15 @@ class GaussianLSTM(ExplicitPredictiveModel):
         """ 
         batch_index = 0
         num_direction = 2 if self.bidirectional else 1
+        device = torch.device("cuda" if next(self.parameters()).is_cuda else "cpu")
 
         # Hidden state in first seq of the LSTM - use noisy state initialization if random_start is True
         if self.random_start:
-            h_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
-            c_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
+            h_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+            c_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
         else:
-            h_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
-            c_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim)
+            h_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+            c_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
         return h_0, c_0
             
     def forward_fc(self, h_n):
@@ -268,7 +279,7 @@ class GaussianLSTM(ExplicitPredictiveModel):
         mu = outputs[:,:self._num_means]
         
         # full covariance matrix
-        if self.covariance_type:
+        if self.covariance_type == 'full':
             diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
             offdiag = outputs[:,2*self._num_means:]
             
@@ -280,7 +291,7 @@ class GaussianLSTM(ExplicitPredictiveModel):
             dist = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
-        elif self.covariance_type == 'full':
+        elif self.covariance_type == 'diagonal':
             sig = torch.exp(outputs[:,self._num_means:])
             dist = D.Normal(loc=mu, scale=sig)
             
