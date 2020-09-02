@@ -283,3 +283,55 @@ def nll(dist, target):
         nlls = torch.sum(nlls,1)
     nll = nlls.mean()
     return nll, nlls
+
+def sample_forward(model, y, prediction_horizon, n_samples=1000):
+    
+    samples = []
+    for iS in range(n_samples):
+        # initial step
+        new_sample = model(y).sample()
+        sequence = [new_sample] #(B, 1)
+        
+        fut_y = y
+        for _ in range(1, prediction_horizon):
+
+            # append to end of input sequence (OPENEI DATA)
+            fut_y = torch.cat((fut_y[:,1:,:],sequence[-1].unsqueeze(-1)),1)
+
+            # run through model
+            dist = model(fut_y)
+
+            # generate next time series
+            next_step = dist.sample()
+            sequence.append(next_step)
+        samples.append(torch.cat(sequence,1))    
+    samples = torch.stack(samples,0)
+    return samples
+
+def sample_forward_lstm(model, y, prediction_horizon, n_samples=1000):
+    samples = []
+    for i in range(n_samples):
+        
+        ## MUST GO THROUGH LSTM BY HAND FOR HIDDEN STATES
+        # initial step
+        h_0, c_0 = model.initialize_lstm(y)    
+        output_lstm, (h_n, c_n) = model.lstm(y, (h_0, c_0))
+        dist = model.forward_fc(output_lstm[:,-1,:])
+        new_sample = dist.sample()
+        sequence = [new_sample] #(B, 1)   
+        for _ in range(1, prediction_horizon):
+
+            # put last sample through lstm
+            output_lstm, (h_n, c_n) = model.lstm(sequence[-1].unsqueeze(-1), (h_n, c_n))
+            
+            # run through model
+            dist = model.forward_fc(output_lstm[:,-1,:])
+
+            # generate next time series
+            next_step = dist.sample()
+            sequence.append(next_step)
+            
+        samples.append(torch.cat(sequence,1)) 
+        
+    samples = torch.stack(samples,0)
+    return samples
