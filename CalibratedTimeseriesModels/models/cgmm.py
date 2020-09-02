@@ -65,6 +65,13 @@ class ConditionalGMM(ExplicitPredictiveModel):
         ps = torch.stack([dist.log_prob(X).exp() for dist in self.input_gaussians],1)
         probs = self.pi_.unsqueeze(0) * ps #(B, k)
         probs = probs / probs.sum(1).unsqueeze(1)
+        
+        # fill nans (unlikely from any distribution) with original pi
+        if torch.isnan(probs).any():
+            nanidxs = torch.nonzero(probs.isnan(),as_tuple=False)
+            for i in range(nanidxs.size(0)):
+                probs[nanidxs[i,0], nanidxs[i,1]] = self.pi_[nanidxs[i,1]]
+        
         mix = D.Categorical(probs)
         
         mu = torch.matmul(self.theta.unsqueeze(0),
