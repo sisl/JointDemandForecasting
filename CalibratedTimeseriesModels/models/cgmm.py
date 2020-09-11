@@ -91,6 +91,8 @@ class ConditionalGMM(ExplicitPredictiveModel):
             y_future (torch.tensor): (B, K, ydim) future observations conditioned on past observations
             u (torch.tensor or None): (B, T+K, udim) inputs corresponding with past observations
         """
+        device = torch.device("cuda" if y.is_cuda else "cpu")
+        
         B, _, _ = y.shape
         ind = self.T*self.input_dim
         outd = self.K*self.output_dim
@@ -98,11 +100,11 @@ class ConditionalGMM(ExplicitPredictiveModel):
         Y = y_future.reshape((B,outd))
         
         gmm = GaussianMixture(n_components = self.n_components, random_state = self.random_state)
-        gmm.fit(torch.cat((X,Y), 1).numpy())
+        gmm.fit(torch.cat((X,Y), 1).cpu().numpy())
         
-        self.pi_ = torch.tensor(gmm.weights_).float()
-        self.mu_ = torch.tensor(gmm.means_).float()
-        self.var_ = torch.tensor(gmm.covariances_).float()
+        self.pi_ = torch.tensor(gmm.weights_).float().to(device)
+        self.mu_ = torch.tensor(gmm.means_).float().to(device)
+        self.var_ = torch.tensor(gmm.covariances_).float().to(device)
         
         
         

@@ -93,7 +93,7 @@ def batch(X, Y, batch_size=32, random_state=0):
         Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
     """
     n = X.shape[0]
-    torch.random.manual_seed(random_state)
+    torch.manual_seed(random_state)
     r = torch.randperm(n)
     X = X[r,...]
     Y = Y[r,...]
@@ -334,4 +334,28 @@ def sample_forward_lstm(model, y, prediction_horizon, n_samples=1000):
         samples.append(torch.cat(sequence,1)) 
         
     samples = torch.stack(samples,0)
+    return samples
+
+def sample_forward_lstm_singlepoint(model, y, prediction_horizon, n_samples=1000):
+    ## MUST GO THROUGH LSTM BY HAND FOR HIDDEN STATES
+    # initial step
+    y = y.expand(n_samples,-1,-1)
+    h_0, c_0 = model.initialize_lstm(y)    
+    output_lstm, (h_n, c_n) = model.lstm(y, (h_0, c_0))
+    dist = model.forward_fc(output_lstm[:,-1,:])
+    new_sample = dist.sample()
+    sequence = [new_sample] #(B, 1)   
+    for _ in range(1, prediction_horizon):
+
+        # put last sample through lstm
+        output_lstm, (h_n, c_n) = model.lstm(sequence[-1].unsqueeze(-1), (h_n, c_n))
+
+        # run through model
+        dist = model.forward_fc(output_lstm[:,-1,:])
+
+        # generate next time series
+        next_step = dist.sample()
+        sequence.append(next_step)
+
+    samples = torch.cat(sequence,1) 
     return samples
