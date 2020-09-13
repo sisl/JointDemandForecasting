@@ -46,7 +46,8 @@ from CalibratedTimeseriesModels.models.blr import *
 
 # load data
 from load_data import load_data
-X_train, Y_train_full, X_test, Y_test_full = load_data(9, 8, 12)
+past_dims, fut_dims = (8,12)
+X_train, Y_train_full, X_test, Y_test_full = load_data(9, past_dims, fut_dims)
 Y_train = Y_train_full[:,[0],:]
 Y_test = Y_test_full[:,[0],:]
 
