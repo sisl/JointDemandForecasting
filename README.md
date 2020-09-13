@@ -1,8 +1,8 @@
-# CalibratedTimeseriesModels.py
+# JointDemandForecasting.py
 A framework for calibrating probabilistic time-series models
 
 ## File stucture
-- `CalibratedTimeseriesModels` contains the source code for the package
+- `JointDemandForecasting` contains the source code for the package
 - `datasets` contains datasets pertaining to experiments.
 	- `datasets/raw` contains raw datasets
 	- `datasets/processed` contains processed datasets

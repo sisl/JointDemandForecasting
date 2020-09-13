@@ -1,8 +1,8 @@
 import torch
 import sys
 sys.path.append("../../")
-import CalibratedTimeseriesModels
-from CalibratedTimeseriesModels.utils import *
+import JointDemandForecasting
+from JointDemandForecasting.utils import *
 
 def load_data(loc, past_dims, fut_dims, path_x=None, path_y=None):
     """

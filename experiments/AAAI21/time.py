@@ -6,13 +6,13 @@ import torch
 import torch.nn as nn
 
 sys.path.append("../../")
-import CalibratedTimeseriesModels
-from CalibratedTimeseriesModels.utils import *
+import JointDemandForecasting
+from JointDemandForecasting.utils import *
 
-from CalibratedTimeseriesModels.models.cgmm import *
-from CalibratedTimeseriesModels.models.gmnn import *
-from CalibratedTimeseriesModels.models.blr import *
-from CalibratedTimeseriesModels.models.mogp import *
+from JointDemandForecasting.models.cgmm import *
+from JointDemandForecasting.models.gmnn import *
+from JointDemandForecasting.models.blr import *
+from JointDemandForecasting.models.mogp import *
 
 from load_data import load_data
 
