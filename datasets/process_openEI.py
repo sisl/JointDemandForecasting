@@ -43,6 +43,10 @@ Y = torch.reshape(Y0,(loadnum,-1,o)).double()
 
 ## Save
 
+output = 'processed'
+if not os.path.exists(output):
+	os.mkdir(output)
+
 output_dir = 'processed/openEI'
 postfix = '_openei_%03d_subset_multitask.pt' %(loadnum)
 if not os.path.exists(output_dir):
