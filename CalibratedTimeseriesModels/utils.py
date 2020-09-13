@@ -4,19 +4,9 @@
 
 import numpy as np
 import torch
+import gpytorch
 import random
 import math
-
-def bfill_lowertriangle(A: torch.Tensor, vec: torch.Tensor):
-    ii, jj = np.tril_indices(A.size(-2), k=-1, m=A.size(-1))
-    A[..., ii, jj] = vec
-    return A
-
-
-def bfill_diagonal(A: torch.Tensor, vec: torch.Tensor):
-    ii, jj = np.diag_indices(min(A.size(-2), A.size(-1)))
-    A[..., ii, jj] = vec
-    return A
 
 def bmm(A,b):
     """
@@ -109,7 +99,7 @@ def batch(X, Y, batch_size=32, random_state=0):
 def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Adam,
           learning_rate=0.01, verbose=True, weighting=None):
     """ 
-    Train a model. 
+    Train a regular model. 
 
     Args: 
         model: pytorch model to train.
@@ -145,7 +135,39 @@ def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Ad
             
     if verbose:
         print ("Learning finished!")
+        
+        
+        
+def train_mogp(model, likelihood, train_x, train_y, training_iter, 
+               optimizer = torch.optim.Adam, learning_rate=0.05, verbose=True):
+    """ 
+    Train a Multi-Output Gaussian Process model. 
 
+    Args: 
+        model: gpytorch model to train.
+        likelihood: gpytorch likelihood function.
+        train_x (torch tensor): (B,in_length)-sized tensor of training inputs
+        train_y (torch tensor): (B,out_length)-sized tensor of training inputs
+        training_iter (int): number of times to iterate through data
+        optimizer (object): torch optimizer
+        learning_rate (float): learning rate for Adam optimizer
+        verbose (bool): if true, print epoch losses
+    """
+    model.train()
+    likelihood.train()
+    optimizer = optimizer([  
+        {'params': model.parameters()}], lr=learning_rate)
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+    for i in range(training_iter):
+        optimizer.zero_grad()
+        output = model(train_x)
+        loss = -mll(output, train_y)
+        loss.backward()
+        if verbose and i%5==0:
+            print('Iter %d/%d - Mean Loss: %.3f' % (i + 1, training_iter, 
+                                                    loss.item()/train_x.size(0)))
+        optimizer.step()
+    
 def mape(dist, target, sampled=False):
     """ 
     Compute MAPE Loss. 
@@ -334,6 +356,27 @@ def sample_forward_lstm(model, y, prediction_horizon, n_samples=1000):
         samples.append(torch.cat(sequence,1)) 
         
     samples = torch.stack(samples,0)
+    return samples
+
+def sample_forward_singlepoint(model, y, prediction_horizon, n_samples=1000):   
+    # initial step
+    y = y.expand(n_samples,-1,-1)
+    new_sample = model(y).sample()
+    sequence = [new_sample] #(B, 1)
+
+    fut_y = y
+    for _ in range(1, prediction_horizon):
+
+        # append to end of input sequence (OPENEI DATA)
+        fut_y = torch.cat((fut_y[:,1:,:],sequence[-1].unsqueeze(-1)),1)
+
+        # run through model
+        dist = model(fut_y)
+
+        # generate next time series
+        next_step = dist.sample()
+        sequence.append(next_step)
+    samples = torch.cat(sequence,1)    
     return samples
 
 def sample_forward_lstm_singlepoint(model, y, prediction_horizon, n_samples=1000):
