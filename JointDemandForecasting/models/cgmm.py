@@ -99,12 +99,12 @@ class ConditionalGMM(ExplicitPredictiveModel):
         X = y.reshape((B,ind))
         Y = y_future.reshape((B,outd))
         
-        gmm = GaussianMixture(n_components = self.n_components, random_state = self.random_state)
-        gmm.fit(torch.cat((X,Y), 1).cpu().numpy())
+        self.gmm = GaussianMixture(n_components = self.n_components, random_state = self.random_state)
+        self.gmm.fit(torch.cat((X,Y), 1).cpu().numpy())
         
-        self.pi_ = torch.tensor(gmm.weights_).float().to(device)
-        self.mu_ = torch.tensor(gmm.means_).float().to(device)
-        self.var_ = torch.tensor(gmm.covariances_).float().to(device)
+        self.pi_ = torch.tensor(self.gmm.weights_).float().to(device)
+        self.mu_ = torch.tensor(self.gmm.means_).float().to(device)
+        self.var_ = torch.tensor(self.gmm.covariances_).float().to(device)
         
         
         
@@ -113,3 +113,26 @@ class ConditionalGMM(ExplicitPredictiveModel):
         self.input_gaussians = [D.MultivariateNormal(self.mu_[i,:ind], 
                                                      self.var_[i, :ind, :ind]) for i in range(self.n_components)]
         self.Sigma_chol = (self.var_[:,ind:,ind:] - torch.matmul(self.theta, self.var_[:,:ind,ind:])).cholesky()
+        
+    def log_prob(self, x, y):
+        """ 
+
+        Evaluate log pdf of input-output pairs
+        
+        Args:
+            x (torch.tensor): (B, T, ydim) past observations
+            y (torch.tensor): (B, K, ydim) future observations
+            
+        Returns:
+            log_prob (torch.tensor): (B,) log pdf under joint distribution
+        """
+        device = torch.device("cuda" if y.is_cuda else "cpu")
+        
+        B = y.shape[0]
+        ind = self.T*self.input_dim
+        outd = self.K*self.output_dim
+        X = x.reshape((B,ind))
+        Y = y.reshape((B,outd))
+        joint = torch.cat((X,Y), 1).cpu().numpy()
+        log_prob = torch.tensor(self.gmm.score_samples(joint)).to(device)
+        return log_prob

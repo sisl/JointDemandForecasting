@@ -33,3 +33,28 @@ class NormalizingFlowModel(nn.Module):
         z = self.prior.sample((n_samples,))
         x, _ = self.inverse(z)
         return x
+    
+    def log_prob(self, x, y):
+        """ 
+
+        Evaluate log pdf of input-output pairs
+        
+        Args:
+            x (torch.tensor): (B, T, ydim) past observations
+            y (torch.tensor): (B, K, ydim) future observations
+            
+        Returns:
+            log_prob (torch.tensor): (B,) log pdf under joint distribution
+        """
+        device = torch.device("cuda" if y.is_cuda else "cpu")
+        
+        B = x.shape[0]
+        B2 = y.shape[0]
+        assert B==B2, "batch dimension mismatch"
+        
+        X = x.reshape((B,-1))
+        Y = y.reshape((B,-1))
+        joint = torch.cat((X,Y), 1)
+        z, prior_logprob, log_det = self.forward(joint)
+        log_prob = prior_logprob + log_det
+        return log_prob
