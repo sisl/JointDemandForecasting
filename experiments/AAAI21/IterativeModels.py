@@ -12,6 +12,7 @@ from JointDemandForecasting.models.gmnn import *
 from JointDemandForecasting.models.blr import *
 
 from load_data import load_data
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
@@ -23,8 +24,8 @@ from load_data import load_data
 
 #loc, past_dims, fut_dims, epoch2, seed1, seed2 = (1, 24, 8, 140, 0, 3)
 #loc, past_dims, fut_dims, epoch2, seed1, seed2 = (9, 24, 8, 140, 1, 3)
-loc, past_dims, fut_dims, epoch2, seed1, seed2 = (1, 8, 12, 200, 0, 0)
-#loc, past_dims, fut_dims, epoch2, seed1, seed2 = (9, 8, 12, 200, 0, 0)
+#loc, past_dims, fut_dims, epoch2, seed1, seed2 = (1, 8, 12, 200, 0, 0)
+loc, past_dims, fut_dims, epoch2, seed1, seed2 = (9, 8, 12, 200, 0, 0)
 
 
 ### Load Data
@@ -55,20 +56,31 @@ train(ss_gmmlstm, X_batches, Y_batches, num_epochs=epoch2, learning_rate=.005)
 
 ### Propagation Test Metrics
 
+# decision problem
+min_indices = 4
+obj_fn = lambda x: var(x, 0.8)
+
 # ARMA-K
 print('ARMA-K Metrics:')
 samples_lr = sample_forward(lin_reg, X_test, fut_dims)
 for f in [mape, wape, rmse, rwse]:
     print(f(samples_lr,Y_test_full,sampled=True))
+print(index_allocation(samples_lr, min_indices, 
+                       obj_fn, Y_test_full, 0.8))
 
 # FNN-K
 print('FNN-K Metrics:')
 samples_ss_gmnn = sample_forward(ss_gmnn, X_test, fut_dims)
 for f in [mape, wape, rmse, rwse]:
     print(f(samples_ss_gmnn,Y_test_full,sampled=True))
+print(index_allocation(samples_ss_gmnn, min_indices, 
+                       obj_fn, Y_test_full, 0.8))
     
 # RNN-K
 print('RNN-K Metrics:')
 samples_ss_gmmlstm = sample_forward_lstm(ss_gmmlstm, X_test, fut_dims)
 for f in [mape, wape, rmse, rwse]:
     print(f(samples_ss_gmmlstm,Y_test_full,sampled=True))
+print(index_allocation(samples_ss_gmmlstm, min_indices, 
+                       obj_fn, Y_test_full, 0.8))
+

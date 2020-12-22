@@ -10,16 +10,17 @@ from JointDemandForecasting.utils import *
 from JointDemandForecasting.models.gmnn import *
 
 from load_data import load_data
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
 # location: 1=Bakersfield,9=SLC
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 
-loc, past_dims, fut_dims = (1, 24, 8)
+#loc, past_dims, fut_dims = (1, 24, 8)
 #loc, past_dims, fut_dims = (9, 24, 8)
 #loc, past_dims, fut_dims = (1, 8, 12)
-#loc, past_dims, fut_dims = (9, 8, 12)
+loc, past_dims, fut_dims = (9, 8, 12)
 
 
 ### Load Data
@@ -40,3 +41,10 @@ train(model, X_batches, Y_batches, num_epochs=300, learning_rate=.002)
 model.eval()
 for f in [mape, wape, rmse, rwse, nll]:
     print(f(model(X_test),Y_test))
+    
+# decision problem
+min_indices = 4
+samples = model(X_test).sample((1000,))
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test, 0.8))    

@@ -12,6 +12,7 @@ from JointDemandForecasting.models.cgmm import *
 from JointDemandForecasting.models.blr import *
 
 from load_data import load_data
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
@@ -20,10 +21,10 @@ from load_data import load_data
 # ncomp: number of components used in mixture, more used for longer output
 # seed: seeds used in final experiments (arbitrarily arrived at during rapid prototyping)
 
-loc, past_dims, fut_dims, ncomp, seed = (1, 24, 8, 4, 4)
+#loc, past_dims, fut_dims, ncomp, seed = (1, 24, 8, 4, 4)
 #loc, past_dims, fut_dims, ncomp, seed = (9, 24, 8, 4, 5)
 #loc, past_dims, fut_dims, ncomp, seed = (1, 8, 12, 5, 4)
-#loc, past_dims, fut_dims, ncomp, seed = (9, 8, 12, 5, 4)
+loc, past_dims, fut_dims, ncomp, seed = (9, 8, 12, 5, 4)
 
 
 ### Load Data
@@ -43,6 +44,12 @@ for f in [mape, wape, rmse, rwse, nll]:
 # train nll
 print(nll(lin_reg(X_train),Y_train))
 
+# decision problem
+min_indices = 4
+samples = lin_reg(X_test).sample((1000,))
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test, 0.8))
 ### Conditional GMM
 
 # train
@@ -57,7 +64,11 @@ for f in [mape, wape, rmse, rwse, nll]:
 # train nll
 print(nll(cgmm(X_train),Y_train))
 
-
-
+# decision problem
+min_indices = 4
+samples = cgmm(X_test).sample((1000,))
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test, 0.8))
 
 

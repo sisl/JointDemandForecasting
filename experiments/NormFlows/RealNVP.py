@@ -18,7 +18,7 @@ from JointDemandForecasting.models.nf.flows import *
 from JointDemandForecasting.models.nf.models import *
 
 from load_data import load_data
-
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
@@ -27,7 +27,7 @@ from load_data import load_data
 
 #loc, past_dims, fut_dims = (1, 24, 8)
 #nflows, hdim, iters = (13, 32, 3000)
-#
+
 
 #loc, past_dims, fut_dims = (9, 24, 8)
 #nflows, hdim, iters = (13, 32, 2500)
@@ -36,11 +36,7 @@ from load_data import load_data
 #nflows, hdim, iters = (10, 32, 4000)
 
 loc, past_dims, fut_dims = (9, 8, 12)
-
-# NormFlow hyperparameters
-nflows = 10
-hdim = 32
-iters = 5000
+nflows, hdim, iters = (10, 32, 5000)
 
 # GNN Approximation hyperparameters
 nsamples = 100000
@@ -141,15 +137,27 @@ wapes = []
 tot_samples = 1000
 sub_samples = 50
 
+samples = []
 for _ in range(tot_samples//sub_samples):
     s = pred_test.sample((sub_samples,))
+    samples.append(s)   
     rwses.append(rwse(s,Y_test,sampled=True)[0])
     wapes.append(wape(s,Y_test,sampled=True)[0])
-rwse = (sum([r**2 for r in rwses])/len(rwses))**0.5
-wape = sum(wapes)/len(wapes)
-print(wape)
-print(rwse)
+rwsem = (sum([r**2 for r in rwses])/len(rwses))**0.5
+wapem = sum(wapes)/len(wapes)
+print(wapem)
+print(rwsem)
 
+samples = torch.cat(samples,0)
+print(samples.shape)
+print(wape(samples,Y_test,sampled=True))
+print(rwse(samples,Y_test,sampled=True))
+
+# decision problem
+min_indices = 4
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test, 0.8))
 
 
 

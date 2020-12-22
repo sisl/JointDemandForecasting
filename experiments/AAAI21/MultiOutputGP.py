@@ -11,6 +11,7 @@ from JointDemandForecasting.utils import *
 from JointDemandForecasting.models.mogp import *
 
 from load_data import load_data
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
@@ -19,10 +20,10 @@ from load_data import load_data
 # epochs: number of epochs through training data used in paper experiments
 # seed: seeds used in final experiments (arbitrarily arrived at during rapid prototyping)
  
-loc, past_dims, fut_dims, epochs, seed = (1, 24, 8, 80, 2)
+#loc, past_dims, fut_dims, epochs, seed = (1, 24, 8, 80, 2)
 #loc, past_dims, fut_dims, epochs, seed = (9, 24, 8, 80, 2)
 #loc, past_dims, fut_dims, epochs, seed = (1, 8, 12, 55, 0)
-#loc, past_dims, fut_dims, epochs, seed = (9, 8, 12, 55, 0)
+loc, past_dims, fut_dims, epochs, seed = (9, 8, 12, 55, 0)
 
 # use_cuda: whether to use a gpu (training LSTM way faster on gpu)
 use_cuda = torch.cuda.is_available()
@@ -73,3 +74,10 @@ with torch.no_grad(), gpytorch.settings.fast_pred_var():
     dist = model(test_x)
 for f in [mape, wape, rmse, rwse]:
     print(f(dist,Y_test.to(device)))
+    
+# decision problem
+min_indices = 4
+samples = dist.sample(torch.Size([1000]))
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test, 0.8)) 

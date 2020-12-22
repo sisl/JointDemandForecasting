@@ -10,6 +10,7 @@ from JointDemandForecasting.utils import *
 from JointDemandForecasting.models.gmnn import *
 
 from load_data import load_data
+from charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 
@@ -51,3 +52,10 @@ train(ss_gmmlstm, X_batches, Y_batches, num_epochs=epochs, learning_rate=.005)
 # test metrics
 for f in [mape, wape, rmse, rwse, nll]:
     print(f(ss_gmmlstm(X_test),Y_test))
+    
+# decision problem
+min_indices = 4
+samples = ss_gmmlstm(X_test).sample((1000,)).cpu()
+obj_fn = lambda x: var(x, 0.8)
+print(index_allocation(samples, min_indices, 
+                       obj_fn, Y_test.cpu(), 0.8))
