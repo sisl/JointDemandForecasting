@@ -8,7 +8,40 @@ import torch
 #import JointDemandForecasting
 #from JointDemandForecasting.utils import *
 
+#
+def index_allocation(samples, min_indices, obj_fn, y_test, alpha):
+    """ 
+    Perform index allocation decision problem. 
 
+    Args: 
+        samples (torch.tensor): (n, B, K*ydim) tensor of samples
+        min_indices (int): number of indices to allocate
+        obj_fn (function): objective function to minimize. function should be (c, n) -> (c,)
+        y_test (torch.tensor): (B, K, ydim) tensor of true data labels
+        alpha (float): final alpha-quantile to report
+        
+    Returns: 
+        score (float): final score
+    """
+    ntest = samples.shape[1]
+    all_actions = torch.zeros(ntest,min_indices,dtype=torch.long)
+    
+    # iterate over test sequences
+    for sidx in range(ntest):
+        
+        # generate candidate actions
+        actions = generate_candidate_indices(samples[:,sidx], min_indices)
+
+        # generate utilities from candidate actions
+        utilities = generate_candidate_utility_distributions(samples[:,sidx], actions)
+
+        # store best actions given objective function
+        all_actions[sidx] = optimal_action(actions, utilities, obj_fn)
+
+    scores = linear_score(all_actions, y_test, return_scores=True)
+    score = var(scores, alpha)
+    return score
+    
 def generate_candidate_indices(samples, min_indices):
     """ 
     Generate list of candidate minimum indices given samples of forecast trajectories. 
