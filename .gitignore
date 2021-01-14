@@ -2,3 +2,7 @@
 datasets/raw/*
 datasets/processed/*
 *.ipynb_checkpoints*
+*.pt
+*.tex
+*.png
+*.ipynb
