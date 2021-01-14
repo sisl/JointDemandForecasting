@@ -2,7 +2,36 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib2tikz as mpl2t
 
-### PER-INDEX ERROR PLOT
+import os
+import sys
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.distributions as D
+
+sys.path.append("../../")
+import JointDemandForecasting
+from JointDemandForecasting.utils import *
+from JointDemandForecasting.models.cgmm import *
+from JointDemandForecasting.models.gmnn import *
+from JointDemandForecasting.models.nf.flows import *
+from JointDemandForecasting.models.nf.models import *
+
+from load_data import load_data
+from charging_utils import *
+
+save_tex = True # whether to save the .tex files or .pngs
+if not os.path.isdir('figs'):
+    os.mkdir('figs')
+
+########## PLOTS ###############
+
+### 1. Per-index error plot
+
+# Taken from running default models for 12 |8 in Bakersfield, CA, with seeds set to 0. 
+# The second return of the JointDemandForecasting.utils.rwse is per-index RWSE.
+
 cgmmrwse = np.array([0.0200, 0.0699, 0.1258, 0.1887, 0.2758, 0.3668, 0.4395, 0.4754, 0.4792,
         0.4469, 0.3779, 0.2983])
 fnnrwse = np.array([0.0119, 0.0465, 0.0975, 0.1674, 0.2639, 0.3735, 0.4721, 0.5437, 0.5895,
@@ -24,30 +53,13 @@ ax.set_aspect(5)
 plt.xlabel('Future time index')
 plt.ylabel('Error metric')
 plt.grid(True)
-#plt.savefig('errors.png')
-mpl2t.save('errors.tex')
-#plt.show()
+if save_tex:
+    mpl2t.save('figs/errors.tex')
+else:
+    plt.savefig('figs/errors.png')
+    plt.show()
 
-### SAMPLE FORECAST PLOTS
-import os
-import sys
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.distributions as D
-
-sys.path.append("../../")
-import JointDemandForecasting
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.cgmm import *
-from JointDemandForecasting.models.gmnn import *
-from JointDemandForecasting.models.nf.flows import *
-from JointDemandForecasting.models.nf.models import *
-
-# load data
-from load_data import load_data
-
+### 2. Sample Forecast Plot
 past_dims, fut_dims, loc = (8, 12, 9)
 X_train, Y_train_full, X_test, Y_test_full = load_data(loc, past_dims, fut_dims)
 Y_train = Y_train_full[:,[0],:]
@@ -102,7 +114,7 @@ dtest_cgmm = cgmm(X_test)
 samples_cgmm = dtest_cgmm.sample((25,))
 
 
-#plot samples
+# plot samples
 plt.figure()
 idxs = [100, 200, 300, 400]
 fig, axs = plt.subplots(2,2, sharex='col', sharey='row')
@@ -130,13 +142,13 @@ fig.text(0.06, 0.5, 'Demand', ha='center', va='center', rotation='vertical')
 handles, labels = axs[1,1].get_legend_handles_labels()
 #fig.legend(handles, labels, loc='upper center',ncol=3)
 axs[1,1].legend(loc='upper left')
-#plt.savefig('samples.png')
-mpl2t.save('samples.tex')
-#plt.show()
+if save_tex:
+    mpl2t.save('figs/samples.tex')
+else:
+    plt.savefig('figs/samples.png')
+    plt.show()
 
-### Full Trajectory NLL
-from flow_utils import *
-from charging_utils import *
+### 3. Full Trajectory NLL
 
 # Settting Parameters
 loc, past_dims, fut_dims = (1, 8, 12)
@@ -203,7 +215,7 @@ test_flow = model.log_prob(X_test, Y_test).detach()
 test_cgmm = cgmm.log_prob(X_test, Y_test).detach()
 test_anf = anf.log_prob(X_test, Y_test).detach()
 
-# PLOT
+# plot
 plt.figure()
 ax = plt.gca()
 
@@ -229,6 +241,8 @@ plt.xlabel('Test log-likelihood')
 plt.ylabel('Density')
 plt.grid(True)
 plt.legend(loc='upper left')
-mpl2t.save('likelihoods.tex')
-#plt.savefig('likelihoods.png')
-#plt.show()
+if save_tex:
+    mpl2t.save('figs/likelihoods.tex')
+else:
+    plt.savefig('figs/likelihoods.png')
+    plt.show()

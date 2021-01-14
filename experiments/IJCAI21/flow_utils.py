@@ -1,9 +1,4 @@
-import os
-import sys
-#import numpy as np
 import torch
-#import torch.nn as nn
-
 
 class Normalize(object):
     """ 
@@ -101,53 +96,3 @@ class PCA(object):
         decompressed = data @ self.U[:,:r].T
         return decompressed
     
-    
-def expectation(x):
-    """ 
-    Performs expectation along final dimension. 
-
-    Args: 
-        x (torch.tensor): (*dims) tensor
-
-    Returns: 
-        E_x (torch.tensor): expectation of x
-    """    
-    
-    E_x = torch.mean(x,-1)
-    return E_x
-
-def var(x, alpha=0.95):
-    """ 
-    Performs value-at-risk along final dimension. 
-
-    Args: 
-        x (torch.tensor): (*dims) tensor
-        alpha (float): quantile for value-at-risk
-
-    Returns: 
-        var_x (torch.tensor): alpha quantile of probability distribution
-    """    
-    assert alpha > 0.0 and alpha < 1.0, "alpha out of domain"
-    n = x.shape[-1]
-    a = int(alpha*n)
-    sort_x, _ = torch.sort(x)
-    var_x = sort_x[...,a]
-    return var_x
-
-def cvar(x, alpha=0.95):
-    """ 
-    Finds conditional value-at-risk along final dimension. 
-
-    Args: 
-        x (torch.tensor): (*dims) tensor
-        alpha (float): quantile for conditional value-at-risk
-
-    Returns: 
-        cvar_x (torch.tensor): expectation of top 1-alpha quantile of distribution
-    """ 
-    assert alpha > 0.0 and alpha < 1.0, "alpha out of domain"
-    n = x.shape[-1]
-    a = int(alpha*n)
-    sort_x, _ = torch.sort(x)
-    cvar_x = torch.mean(sort_x[...,a:],-1)
-    return cvar_x
