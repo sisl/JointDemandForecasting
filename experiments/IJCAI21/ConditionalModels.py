@@ -19,19 +19,19 @@ from charging_utils import *
 # location: 1=Bakersfield,9=SLC
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 # ncomp: number of components used in mixture, more used for longer output
-# seed: seeds used in final experiments (arbitrarily arrived at during rapid prototyping)
 
-#loc, past_dims, fut_dims, ncomp, seed = (1, 24, 8, 4, 4)
-#loc, past_dims, fut_dims, ncomp, seed = (9, 24, 8, 4, 5)
+loc, past_dims, fut_dims, ncomp = (1, 8, 12, 5)
+#loc, past_dims, fut_dims, ncomp = (9, 8, 12, 5)
+#loc, past_dims, fut_dims, ncomp = (1, 16, 12, 5)
+#loc, past_dims, fut_dims, ncomp = (9, 16, 12, 5)
+#loc, past_dims, fut_dims, ncomp = (1, 24, 12, 4)
+#loc, past_dims, fut_dims, ncomp = (9, 24, 12, 4)
 
-loc, past_dims, fut_dims, ncomp, seed = (1, 8, 12, 5, 0)
-#loc, past_dims, fut_dims, ncomp, seed = (9, 8, 12, 5, 0)
+ntrials = 10
 
-#loc, past_dims, fut_dims, ncomp, seed = (1, 16, 12, 5, 0)
-#loc, past_dims, fut_dims, ncomp, seed = (9, 16, 12, 5, 0)
-
-#loc, past_dims, fut_dims, ncomp, seed = (1, 24, 12, 4, 0)
-#loc, past_dims, fut_dims, ncomp, seed = (9, 24, 12, 4, 0)
+# decision problem
+min_indices = 4
+obj_fn = lambda x: var(x, 0.8)
 
 ### Load Data
 
@@ -44,37 +44,45 @@ lin_reg = BayesianLinearRegression(1, past_dims, 1, fut_dims)
 lin_reg.fit(X_train, Y_train)
 
 # test metrics
-for f in [mape, wape, rmse, rwse, nll]:
-    print(f(lin_reg(X_test),Y_test))
+print('CondG Metrics:')
+dist = lin_reg(X_test)
+dist_tr = lin_reg(X_train)
+print("WAPE = ", wape(dist,Y_test)[0])
+print("RWSE = ", rwse(dist,Y_test)[0])
+print("NLL = ", nll(dist,Y_test)[0])
+print("TrNLL = ", nll(dist_tr,Y_train)[0])
 
-# train nll
-print(nll(lin_reg(X_train),Y_train))
-
-# decision problem
-min_indices = 4
-samples = lin_reg(X_test).sample((1000,))
-obj_fn = lambda x: var(x, 0.8)
-print(index_allocation(samples, min_indices, 
-                       obj_fn, Y_test, 0.8))
+samples = dist.sample((1000,))
+print("DScore = ", index_allocation(samples, min_indices, 
+                                    obj_fn, Y_test, 0.8))
 ### Conditional GMM
 
 # train
-cgmm = ConditionalGMM(1, past_dims, 1, fut_dims, 
-                      n_components=ncomp, random_state=seed)
-cgmm.fit(X_train, Y_train)
+wapes, rwses, nlls, trnlls, dscores = [], [], [], [], []
+for seed in range(ntrials):
+    cgmm = ConditionalGMM(1, past_dims, 1, fut_dims, 
+                          n_components=ncomp, random_state=seed)
+    try:
+        cgmm.fit(X_train, Y_train)
+    except:
+        continue
 
-# test metrics
-for f in [mape, wape, rmse, rwse, nll]:
-    print(f(cgmm(X_test),Y_test))
+    # test metrics
+    dist = cgmm(X_test)
+    dist_tr = cgmm(X_train)
+    wapes.append(wape(dist,Y_test)[0])
+    rwses.append(rwse(dist,Y_test)[0])
+    nlls.append(nll(dist,Y_test)[0])
+    trnlls.append(nll(dist_tr,Y_train)[0])
 
-# train nll
-print(nll(cgmm(X_train),Y_train))
+    samples = dist.sample((1000,))
+    dscores.append(index_allocation(samples, min_indices, 
+                                    obj_fn, Y_test, 0.8))
+    print('Seed ', seed, ' done')
 
-# decision problem
-min_indices = 4
-samples = cgmm(X_test).sample((1000,))
-obj_fn = lambda x: var(x, 0.8)
-print(index_allocation(samples, min_indices, 
-                       obj_fn, Y_test, 0.8))
-
-
+print('CondGMM Metrics:')
+print("WAPEs = ", torch.stack(wapes))
+print("RWSEs = ", torch.stack(rwses))
+print("NLLs = ", torch.stack(nlls))
+print("TrNLLs = ", torch.stack(trnlls))
+print("DScores = ", torch.stack(dscores))

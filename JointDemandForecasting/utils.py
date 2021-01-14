@@ -111,7 +111,6 @@ def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Ad
         verbose (bool): if true, print epoch losses
     """                                                        
     optimizer = optimizer(model.parameters(), lr=learning_rate)
-    checkpoint = model.state_dict()
     
     # Train the model
     for epoch in range(num_epochs):
@@ -124,12 +123,7 @@ def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Ad
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()/len(X_batches)
-        if np.isnan(epoch_loss): #or epoch_loss > 10^10:
-            model.load_state_dict(checkpoint)
-            print("Training Error, re-loading checkpoint")
-            continue
-        if epoch % 2 == 0: 
-            checkpoint = model.state_dict()
+
         if verbose and (num_epochs < 100 or epoch % 10 == 0):
             print ("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
             
