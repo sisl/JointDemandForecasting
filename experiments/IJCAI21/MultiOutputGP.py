@@ -18,17 +18,19 @@ from charging_utils import *
 # location: 1=Bakersfield,9=SLC
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 # epochs: number of epochs through training data used in paper experiments
-# seed: seeds used in final experiments (arbitrarily arrived at during rapid prototyping)
- 
-#loc, past_dims, fut_dims, epochs, seed = (1, 24, 8, 80, 0)
-#loc, past_dims, fut_dims, epochs, seed = (9, 24, 8, 80, 0)
 
-loc, past_dims, fut_dims, epochs, seed = (1, 8, 12, 55, 0)
-loc, past_dims, fut_dims, epochs, seed = (9, 8, 12, 55, 0)
-loc, past_dims, fut_dims, epochs, seed = (1, 16, 12, 55, 0)
-loc, past_dims, fut_dims, epochs, seed = (9, 16, 12, 55, 0)
-loc, past_dims, fut_dims, epochs, seed = (1, 24, 12, 55, 0)
-loc, past_dims, fut_dims, epochs, seed = (9, 24, 12, 55, 0)
+#loc, past_dims, fut_dims, epochs = (1, 8, 12, 55)
+#loc, past_dims, fut_dims, epochs = (9, 8, 12, 55)
+#loc, past_dims, fut_dims, epochs = (1, 16, 12, 65)
+#loc, past_dims, fut_dims, epochs = (9, 16, 12, 65)
+loc, past_dims, fut_dims, epochs = (1, 24, 12, 75)
+#loc, past_dims, fut_dims, epochs = (9, 24, 12, 75)
+
+ntrials = 10
+
+# decision problem
+min_indices = 4
+obj_fn = lambda x: var(x, 0.8)
 
 # use_cuda: whether to use a gpu (training LSTM way faster on gpu)
 use_cuda = torch.cuda.is_available()
@@ -55,34 +57,41 @@ kernels = {'rbf': gpytorch.kernels.RBFKernel(),
 
 covar_kernel = kernels['rq']*kernels['matern']
 index_rank = 8
-likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=fut_dims).to(device)
-model = MultiOutputGP(train_x, train_y, likelihood, covar_kernel=covar_kernel, 
-                      index_rank=index_rank, random_state=seed).to(device)
 
-train_mogp(model, likelihood, train_x, train_y, epochs, verbose=False)
+wapes, rwses, nlls, trnlls, dscores = [], [], [], [], []
+for seed in range(ntrials):
+    likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=fut_dims).to(device)
+    model = MultiOutputGP(train_x, train_y, likelihood, covar_kernel=covar_kernel, 
+                          index_rank=index_rank, random_state=seed).to(device)
+    train_mogp(model, likelihood, train_x, train_y, epochs, verbose=False)
 
+    # train nll    
+    model.eval()
+    likelihood.eval()
+    train_dist = model.forward_independent(train_x)
 
-# train nll    
-model.eval()
-likelihood.eval()
-train_dist = model.forward_independent(train_x)
-print(nll(train_dist, Y_train.to(device)))
+    # test nll
+    test_dist = model.forward_independent(test_x)
 
-# test nll
-test_dist = model.forward_independent(test_x)
-print(nll(test_dist, Y_test.to(device)))
+    # other test metrics
+    model.eval()
+    likelihood.eval()
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        dist = model(test_x)
 
-# other test metrics
-model.eval()
-likelihood.eval()
-with torch.no_grad(), gpytorch.settings.fast_pred_var():
-    dist = model(test_x)
-for f in [mape, wape, rmse, rwse]:
-    print(f(dist,Y_test.to(device)))
-    
-# decision problem
-min_indices = 4
-samples = dist.sample(torch.Size([1000]))
-obj_fn = lambda x: var(x, 0.8)
-print(index_allocation(samples, min_indices, 
-                       obj_fn, Y_test, 0.8)) 
+    wapes.append(wape(dist,Y_test.to(device))[0])
+    rwses.append(rwse(dist,Y_test.to(device))[0])
+    nlls.append(nll(test_dist, Y_test.to(device))[0])    
+    trnlls.append(nll(train_dist, Y_train.to(device))[0])
+
+    samples = dist.sample(torch.Size([1000]))
+    dscores.append(index_allocation(samples, min_indices, 
+                                    obj_fn, Y_test, 0.8))
+    print('Seed ', seed, ' done')
+
+print('MOGP Metrics:')
+print("WAPEs = ", torch.stack(wapes).cpu())
+print("RWSEs = ", torch.stack(rwses).cpu())
+print("NLLs = ", torch.stack(nlls).cpu())
+print("TrNLLs = ", torch.stack(trnlls).cpu())
+print("DScores = ", torch.stack(dscores).cpu())
