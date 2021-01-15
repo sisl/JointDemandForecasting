@@ -13,7 +13,7 @@ class GaussianMixtureNeuralNet(ExplicitPredictiveModel):
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
                  n_components=3, covariance_type='diagonal', rank=2, bands=2, tied=False, dropout=0.0,
-                random_state=None):
+                 random_state=None):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
