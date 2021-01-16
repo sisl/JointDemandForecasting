@@ -19,12 +19,12 @@ from charging_utils import *
 # location: 1=Bakersfield,9=SLC
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 
-loc, past_dims, fut_dims = (1, 8, 12)
+#loc, past_dims, fut_dims = (1, 8, 12)
 #loc, past_dims, fut_dims = (9, 8, 12)
 #loc, past_dims, fut_dims = (1, 16, 12)
 #loc, past_dims, fut_dims = (9, 16, 12)
 #loc, past_dims, fut_dims = (1, 24, 12)
-#loc, past_dims, fut_dims = (9, 24, 12)
+loc, past_dims, fut_dims = (9, 24, 12)
 
 ntrials = 10
 
@@ -56,11 +56,11 @@ print("DScore = ", index_allocation(samples, min_indices,
 # FNN-1
 wapes, rwses, dscores = [], [], []
 for seed1 in range(ntrials):
+    X_batches, Y_batches = batch(X_train, Y_train, batch_size = 64, random_state = seed1)
     hidden_layers = [40, 40, 40]
     ss_gmnn = GaussianMixtureNeuralNet(1, past_dims, hidden_layers, 1, 1, 
                                        n_components=3, random_state=seed1)
 
-    X_batches, Y_batches = batch(X_train, Y_train, batch_size = 64, random_state = seed1)
     try:
         train(ss_gmnn, X_batches, Y_batches, num_epochs=150, learning_rate=.005, verbose=False)    
         samples = sample_forward(ss_gmnn, X_test, fut_dims)
@@ -80,12 +80,12 @@ print("DScores = ", torch.stack(dscores))
 # RNN-1
 wapes, rwses, dscores = [], [], []
 for seed2 in range(ntrials):
+    X_batches, Y_batches = batch(X_train, Y_train, batch_size = 64, random_state = seed2)
     hidden_layers = [20, 20, 20]
     hidden_dim = 40
     ss_gmmlstm = GaussianMixtureLSTM(1, hidden_dim, hidden_layers, 1, 1, 
-                                     n_components=3, random_state=seed2)
+                                     n_components=3, random_state=seed2, random_start=False)
 
-    X_batches, Y_batches = batch(X_train, Y_train, batch_size = 64, random_state = seed1)
     try:
         train(ss_gmmlstm, X_batches, Y_batches, num_epochs=200, learning_rate=.005, verbose=False)
         samples = sample_forward_lstm(ss_gmmlstm, X_test, fut_dims)

@@ -24,7 +24,7 @@ loc, past_dims, fut_dims = (1, 8, 12)
 #loc, past_dims, fut_dims = (1, 24, 12)
 #loc, past_dims, fut_dims = (9, 24, 12)
 
-ntrials = 3
+ntrials = 10
 
 # decision problem
 min_indices = 4
