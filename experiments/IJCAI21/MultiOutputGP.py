@@ -19,11 +19,11 @@ from charging_utils import *
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 # epochs: number of epochs through training data used in paper experiments
 
-#loc, past_dims, fut_dims, epochs = (1, 8, 12, 55)
+loc, past_dims, fut_dims, epochs = (1, 8, 12, 55)
 #loc, past_dims, fut_dims, epochs = (9, 8, 12, 55)
 #loc, past_dims, fut_dims, epochs = (1, 16, 12, 65)
 #loc, past_dims, fut_dims, epochs = (9, 16, 12, 65)
-loc, past_dims, fut_dims, epochs = (1, 24, 12, 75)
+#loc, past_dims, fut_dims, epochs = (1, 24, 12, 75)
 #loc, past_dims, fut_dims, epochs = (9, 24, 12, 75)
 
 ntrials = 10

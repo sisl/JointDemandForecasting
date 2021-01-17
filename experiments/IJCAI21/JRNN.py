@@ -18,7 +18,7 @@ from charging_utils import *
 # past_dims, fut_dims: past and future time step, either (24,8) or (8,12)
 # epochs: number of epochs through training data used in paper experiments
 # seed: seeds used in final experiments (arbitrarily arrived at during rapid prototyping)
- 
+
 loc, past_dims, fut_dims = (1, 8, 12)
 #loc, past_dims, fut_dims = (9, 8, 12)
 #loc, past_dims, fut_dims = (1, 16, 12)
@@ -26,7 +26,7 @@ loc, past_dims, fut_dims = (1, 8, 12)
 #loc, past_dims, fut_dims = (1, 24, 12)
 #loc, past_dims, fut_dims = (9, 24, 12)
 
-ntrials = 5
+ntrials = 10
 
 # decision problem
 min_indices = 4
