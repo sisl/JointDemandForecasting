@@ -1,5 +1,5 @@
 # JointDemandForecasting.py
-A framework for calibrating probabilistic time-series models
+A framework for multi-step probabilistic time-series/demand forecasting models
 
 ## File stucture
 - `JointDemandForecasting` contains the source code for the package
@@ -20,9 +20,9 @@ conda activate jdf
 conda deactivate
 ```
 
-For a looser set of requirements, use:
+To enable CUDA capabilities, rerun:
 ```
-conda install --name jdf --file loose_requirements.txt
+conda install --name jdf pytorch cudatoolkit=10.2 -c pytorch
 ```
 
 ## Running Experiments
@@ -31,8 +31,9 @@ To run experiments from the associated paper:
 
 1. Install and activate the environment.
 2. Follow directions in the `datasets` folder to download and process the OPENEI dataset.
-3. Navigate the the `experiments/AAAI21/` folder and run the appropriate scripts:
+3. Navigate the the `experiments/IJCAI21/` folder and run the appropriate scripts:
 	- with, for example, `python ConditionalModels.py`
-	- pick correct settings for metric-generating scripts by uncommenting appropriate lines in each script
-	- pick correct settings for timing script with `--model`  and `--n` settings
-		- e.g. `python time.py --model condgmm --n 10000` 
+		- ARMA, IFNN, IRNN models are in `IterativeModels.py`, CG and CGMM are in `ConditionalModels.py`, MOGP is in `MultiOutputGP.py`, JFNN is in `JFNN.py`, JRNN is in `JRNN.py`, and CANF is in`CANF.py`
+		- pick appropriate setting (location, input length, output length, etc.) by uncommenting appropriate line
+	- our multi-trial results, as well as run-rejection for outlier trials can be seen in `experiments/IJCAI21/results` (no CANF trials were rejected)
+	- plots can be generated with `python plots.py`
