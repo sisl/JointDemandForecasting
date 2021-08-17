@@ -28,7 +28,7 @@ if use_cuda:
     torch.cuda.empty_cache()
 device = torch.device("cuda" if use_cuda else "cpu")
 
-def fit_nf_model(model, optimizer, train, cv, iters=1000, save_every=20):
+def fit_nf_model(model, optimizer, train, cv, iters=1000, save_every=50):
     """
     Train a normalizing flow model, given a model, optimizer, train set, cv set
     Args:
@@ -39,9 +39,11 @@ def fit_nf_model(model, optimizer, train, cv, iters=1000, save_every=20):
         iters: number of iterations
         save_every: number of iterations to test cvs
     Returns:
-        cv_log_probs (list of tuples): list of (iter, mean_log_prob)
+        lp_list (list): list of mean log probs
+        iter_list (list): list of iterations
     """ 
-    cv_log_probs = []
+    lp_list = []
+    iter_list = []
     for i in range(iters):
         optimizer.zero_grad()
         z, prior_logprob, log_det = model(train)
@@ -52,13 +54,14 @@ def fit_nf_model(model, optimizer, train, cv, iters=1000, save_every=20):
         if (i+1) % save_every == 0:
             _, prior_logprob_test, log_det_test = model(cv)
             logprob_test = prior_logprob_test + log_det_test
-            cv_log_probs.append((i+1, logprob_test.mean().data))
+            iter_list.append(i+1)
+            lp_list.append(logprob_test.mean().data)
             logger.info(f"Iter: {i+1}\t" +
                         f"Logprob: {logprob.mean().data:.2f}\t" +
                         f"Prior: {prior_logprob.mean().data:.2f}\t" +
                         f"LogDet: {log_det.mean().data:.2f}\t" + 
                         f"Logprob_test: {logprob_test.mean().data:.2f}")
-    return cv_log_probs
+    return lp_list, iter_list
 
 #   hyperparams = {
 #        'gmm_ncomp': [6],
@@ -85,6 +88,7 @@ def hyp_tune_gmm(train, cv, ncomps, nseeds=10):
     X_train, Y_train = train[:,:1].unsqueeze(-1), train[:,1:].unsqueeze(-1)
     X_cv, Y_cv = cv[:,:1].unsqueeze(-1), cv[:,1:].unsqueeze(-1)
     best_ll = -float('inf')
+    means = []
     for ncomp in ncomps:
         ll = []
         for i in range(nseeds):
@@ -96,9 +100,11 @@ def hyp_tune_gmm(train, cv, ncomps, nseeds=10):
             except:
                 pass
         ll_mean = torch.tensor(ll).mean().item()
+        means.append(ll_mean)
         if ll_mean > best_ll:
             best_ll = ll_mean
             best_ncomp = ncomp
+    print('GMM LL means: {}'.format(means))
     return best_ncomp, best_ll
 
 def hyp_tune_nf(train, cv, hyp):
@@ -122,26 +128,32 @@ def hyp_tune_nf(train, cv, hyp):
     for nflows in hyp['nflows']:
         for hdim in hyp['hdim']:
             for lr in hyp['lr']:
-                flows = [RealNVP(dim=dim, hidden_dim = hdim, 
-                        base_network=FCNN) for _ in range(nflows)]
-                prior = D.MultivariateNormal(torch.zeros(dim), torch.eye(dim))
-                nf = NormalizingFlowModel(prior, flows, random_state=0)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-                cv_log_probs = fit_nf_model(nf, optimizer, train, cv, iters)
-                for i, ll in cv_log_probs:
-                    if ll > best_ll:
-                        best_ll = ll
-                        best_nflows = nflows
-                        best_hdim = hdim
-                        best_lr = lr
-                        best_iters = i
+                lps = []
+                for seed in range(5):
+                    flows = [RealNVP(dim=dim, hidden_dim = hdim, 
+                            base_network=FCNN) for _ in range(nflows)]
+                    prior = D.MultivariateNormal(torch.zeros(dim), torch.eye(dim))
+                    nf = NormalizingFlowModel(prior, flows, random_state=seed)
+                    optimizer = torch.optim.Adam(nf.parameters(), lr=lr)
+                    lp_list, iter_list = fit_nf_model(nf, optimizer, train, cv, iters)
+                    lps.append(lp_list)
+                lps = torch.tensor(lps).mean(dim=0)
+                idx = torch.argmax(lps)
+                max_iter, max_ll = iter_list[idx], lps[idx]
+                print(nflows, hdim, lr, max_iter, max_ll)
+                if max_ll > best_ll:
+                    best_ll = max_ll
+                    best_nflows = nflows
+                    best_hdim = hdim
+                    best_lr = lr
+                    best_iters = max_iter
 
     # retrain best model
     flows = [RealNVP(dim=dim, hidden_dim = best_hdim, 
             base_network=FCNN) for _ in range(best_nflows)]
     prior = D.MultivariateNormal(torch.zeros(dim), torch.eye(dim))
     best_nf = NormalizingFlowModel(prior, flows, random_state=0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=best_lr)
+    optimizer = torch.optim.Adam(best_nf.parameters(), lr=best_lr)
     _ = fit_nf_model(best_nf, optimizer, train, cv, best_iters)
     best_nf.eval()
     return best_nflows, best_hdim, best_lr, best_iters, best_nf
@@ -187,20 +199,20 @@ def hyp_tune(train, cv, hyp, filestr):
     with open(filestr+'_best_hyperparams.json', 'w') as outfile:
         json.dump(best_hyperparams, outfile)
 
-def test_models(datasets, hyp, filestr, save_plot_number):
+def test_models(dataset_list, hyp, filestr, save_plot_number):
     """
     Test tuned hyperparameters on newly sampled datasets
 
     Args:
-        datasets (list of tuple): list of nseeds (train, test) dataset pairs
+        dataset_list (list of tuple): list of nseeds (train, test) dataset pairs
         hyp (dict): dictionary of best hyperparameters
         filestr (dict): filestr to save plots to
         save_plot_number (int): index of plot to save
     """
-    nseeds = len(datasets)
+    nseeds = len(dataset_list)
     gmm_lps, nf_lps, anf_lps = [], [], []
     
-    for i, (train, test) in enumerate(datasets):
+    for i, (train, test) in enumerate(dataset_list):
         # fit models
         X_train, Y_train = train[:,:1].unsqueeze(-1), train[:,1:].unsqueeze(-1)
         X_test, Y_test = test[:,:1].unsqueeze(-1), test[:,1:].unsqueeze(-1)
@@ -220,8 +232,8 @@ def test_models(datasets, hyp, filestr, save_plot_number):
         prior = D.MultivariateNormal(torch.zeros(train.shape[1]),
                                 torch.eye(train.shape[1]))
         nf = NormalizingFlowModel(prior, flows, random_state=i+1)
-        optimizer = torch.optim.Adam(model.parameters(), lr=hyp['lr'])
-        _ = fit_nf_model(nf, optimizer, train, cv, hyp['iters'])
+        optimizer = torch.optim.Adam(nf.parameters(), lr=hyp['lr'])
+        _ = fit_nf_model(nf, optimizer, train, test, hyp['iters'])
         nf.eval()
         nf_lps.append(nf.log_prob(X_test, Y_test).detach().mean())
 
@@ -236,11 +248,13 @@ def test_models(datasets, hyp, filestr, save_plot_number):
         except:
             print('ANF seed {} failed'.format(i))
 
+        print('Seed %i done' %(i))
+
         # save correct plot number
         if i == save_plot_number:
             
             plot_models = {'gmm':gmm,'nf':nf, 'anf':anf}
-            plot_train, plot_test = train.copy(), test.copy()
+            plot_train, plot_test = train.clone(), test.clone()
 
     # Print
     gmm_lps, nf_lps, anf_lps = torch.tensor(gmm_lps), torch.tensor(nf_lps), torch.tensor(anf_lps)
@@ -251,9 +265,9 @@ def test_models(datasets, hyp, filestr, save_plot_number):
     print('ANF LogProbs = {}'.format(anf_lps))
 
     # Statistics
-    print('GMM LogProb Mean = %.03f \pm %.03f' %(torch.mean(gmm_lps), torch.std_mean(gmm_lps)))
-    print('NF LogProb Mean = %.03f \pm %.03f' %(torch.mean(nf_lps), torch.std_mean(nf_lps)))
-    print('ANF LogProb Mean = %.03f \pm %.03f' %(torch.mean(anf_lps), torch.std_mean(anf_lps)))
+    print('GMM LogProb Mean = %.03f \pm %.03f' %(torch.mean(gmm_lps), torch.std(gmm_lps)/(len(gmm_lps)**0.5)))
+    print('NF LogProb Mean = %.03f \pm %.03f' %(torch.mean(nf_lps), torch.std(nf_lps)/(len(nf_lps)**0.5)))
+    print('ANF LogProb Mean = %.03f \pm %.03f' %(torch.mean(anf_lps), torch.std(anf_lps)/(len(anf_lps)**0.5)))
     
     # Save plots
     save_plots(plot_models, plot_train, plot_test, filestr)
@@ -313,6 +327,11 @@ def set_seeds(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     
+def make_dataset(nsamples, noise):
+    #data1 = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
+    #data2 = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
+    data3 = torch.rand(nsamples, 2).float()
+    return data3
 
 if __name__=='__main__':
     # parse arguments
@@ -327,9 +346,9 @@ if __name__=='__main__':
         action="store_true")
     parser.add_argument('-nseeds', default=10, type=int,
         help='number of test seeds')    
-    parser.add_argument('-ntrain', default=30, type=int,
+    parser.add_argument('-ntrain', default=1000, type=int,
         help='number of training samples') 
-    parser.add_argument('-ncv', default=1000, type=int,
+    parser.add_argument('-ncv', default=200, type=int,
         help='number of cv samples')
     parser.add_argument('-ntest', default=1000, type=int,
         help='number of test samples')
@@ -346,34 +365,34 @@ if __name__=='__main__':
     # early experiments: nflows, hdim, lr, iters  = (10, 10, 0.005, 500)
 
     hyperparams = {
-        'gmm_ncomp': [5],
-        'nflows': [10],
-        'hdim': [10],
-        'lr':[0.005],
-        'iters':[500], # will do early stopping to choose best iteration number
-        'flow_samples': [10000],
-        'anf_ncomp': [10],
+        'gmm_ncomp': [7,8,9, 10, 11],
+        'nflows': [5, 10, 15],
+        'hdim': [8, 12, 24],
+        'lr':[0.001, 0.005],
+        'iters':[2000], # will NOT do early stopping to choose best iteration number
+        'flow_samples': [100000],
+        'anf_ncomp': [5, 10, 15, 20],
     }
 
+    noise_level = 0.05
     if args.tune:
 
         set_seeds(0)
         n_samples = n_train + n_cv + n_test
-        noisy_moons = datasets.make_moons(n_samples=n_samples, noise=.05)
-        dataset = torch.tensor(noisy_moons[0]).float()
+        dataset = make_dataset(n_samples, noise_level)
         train, cv, test = dataset[:n_train], dataset[n_train:n_train+n_cv], dataset[n_train+n_cv:]
+        hyp_tune(train, cv, hyperparams, filestr)
 
     if args.test:
         
         with open(filestr+'_best_hyperparams.json') as json_file:
             best_hyperparams = json.load(json_file)
-        datasets = []
+        dataset_list = []
         for i in range(nseeds):
             set_seeds(i+1)
             n_samples = n_train + n_cv + n_test
-            noisy_moons = datasets.make_moons(n_samples=n_samples, noise=.05)
-            dataset = torch.tensor(noisy_moons[0]).float()
-            datasets.append((dataset[:n_train], dataset[n_train+n_cv:]))
+            dataset = make_dataset(n_samples, noise_level)
+            dataset_list.append((dataset[:n_train], dataset[n_train+n_cv:]))
 
-        test_models(datasets, best_hyperparams, filestr, save_plot_number)
+        test_models(dataset_list, best_hyperparams, filestr, save_plot_number)
         
