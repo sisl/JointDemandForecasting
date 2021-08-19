@@ -191,28 +191,28 @@ def hyp_tune(train, cv, hyp, filestr, nseeds=10):
     with open(filestr+'_best_hyperparams.json', 'w') as outfile:
         json.dump(best_hyperparams, outfile)
 
-def test_models(dataset_list, hyp, filestr, save_plot_number):
+def test_models(train, test, hyp, filestr, save_plot_number, nseeds=10):
     """
     Test tuned hyperparameters on newly sampled datasets
 
     Args:
-        dataset_list (list of tuple): list of nseeds (train, test) dataset pairs
+        train
+        test
         hyp (dict): dictionary of best hyperparameters
         filestr (dict): filestr to save plots to
         save_plot_number (int): index of plot to save
+        nseeds (int): number of test seeds to try
     """
-    nseeds = len(dataset_list)
     gmm_lps, nf_lps, anf_lps = [], [], []
-    
-    for i, (train, test) in enumerate(dataset_list):
-        # fit models
-        X_train, Y_train = train[:,:1].unsqueeze(-1), train[:,1:].unsqueeze(-1)
-        X_test, Y_test = test[:,:1].unsqueeze(-1), test[:,1:].unsqueeze(-1)
+    X_train, Y_train = train[:,:1].unsqueeze(-1), train[:,1:].unsqueeze(-1)
+    X_test, Y_test = test[:,:1].unsqueeze(-1), test[:,1:].unsqueeze(-1)
+    for i in range(nseeds):
         
+        # fit models
         # GMM
         try:
             gmm = ConditionalGMM(1, 1, 1, 1, 
-                n_components=hyp['gmm_ncomp'], random_state=i+1)
+                n_components=hyp['gmm_ncomp'], random_state=i)
             gmm.fit(X_train, Y_train)
             gmm_lps.append(gmm.log_prob(X_test, Y_test).detach().mean())
         except:
@@ -223,7 +223,7 @@ def test_models(dataset_list, hyp, filestr, save_plot_number):
                         base_network=FCNN) for _ in range(hyp['nflows'])]
         prior = D.MultivariateNormal(torch.zeros(train.shape[1]),
                                 torch.eye(train.shape[1]))
-        nf = NormalizingFlowModel(prior, flows, random_state=i+1)
+        nf = NormalizingFlowModel(prior, flows, random_state=i)
         optimizer = torch.optim.Adam(nf.parameters(), lr=hyp['lr'])
         _ = fit_nf_model(nf, optimizer, train, test, hyp['iters'])
         nf.eval()
@@ -234,7 +234,7 @@ def test_models(dataset_list, hyp, filestr, save_plot_number):
         X_train_sampled, Y_train_sampled = many_samples[:,:1].unsqueeze(-1), many_samples[:,1:].unsqueeze(-1)
         try:
             anf = ConditionalGMM(1, 1, 1, 1,
-                    n_components=hyp['anf_ncomp'], random_state=i+1)
+                    n_components=hyp['anf_ncomp'], random_state=i)
             anf.fit(X_train_sampled, Y_train_sampled)
             anf_lps.append(anf.log_prob(X_test, Y_test).detach().mean())
         except:
@@ -361,36 +361,34 @@ if __name__=='__main__':
     n_train, n_cv, n_test = args.ntrain, args.ncv, args.ntest
     filestr = 'results/simple_' + args.method
     
-    # early experiments: nflows, hdim, lr, iters  = (10, 10, 0.005, 500)
+    if args.method == 'moons':
+        pass
+        # early experiments: nflows, hdim, lr, iters  = (10, 10, 0.005, 500)
+    elif args.method == 'square':
+        hyperparams = {
+            'gmm_ncomp': [7, 8, 9, 10, 11],
+            'nflows': [4, 6, 8, 10, 15],
+            'hdim': [4, 8, 12, 24],
+            'lr':[0.001, 0.005],
+            'iters':[2500], # will do early stopping to choose best iteration number (so only include single high iters)
+            'flow_samples': [10000, 50000],
+            'anf_ncomp': [20, 30, 35, 40, 45, 50],
+        }
+    else:
+        raise NotImplementedError
 
-    hyperparams = {
-        'gmm_ncomp': [7, 8, 9, 10, 11],
-        'nflows': [4, 6, 8, 10, 15],
-        'hdim': [4, 8, 12, 24],
-        'lr':[0.001, 0.005],
-        'iters':[2500], # will do early stopping to choose best iteration number (so only include single high iters)
-        'flow_samples': [100000],
-        'anf_ncomp': [5, 10, 12, 15, 17, 20],
-    }
+    set_seeds(0)
+    n_samples = n_train + n_cv + n_test
 
-    if args.tune:
+    dataset = make_dataset(args.method, n_samples)
+    train, cv, test = dataset[:n_train], dataset[n_train:n_train+n_cv], dataset[n_train+n_cv:]
 
-        set_seeds(0)
-        n_samples = n_train + n_cv + n_test
-        dataset = make_dataset(args.method, n_samples)
-        train, cv, test = dataset[:n_train], dataset[n_train:n_train+n_cv], dataset[n_train+n_cv:]
+    if args.tune: 
         hyp_tune(train, cv, hyperparams, filestr, nseeds=args.ntuneseeds)
 
     if args.test:
         
         with open(filestr+'_best_hyperparams.json') as json_file:
             best_hyperparams = json.load(json_file)
-        dataset_list = []
-        for i in range(args.ntestseeds):
-            set_seeds(i+1)
-            n_samples = n_train + n_cv + n_test
-            dataset = make_dataset(args.method, n_samples)
-            dataset_list.append((dataset[:n_train], dataset[n_train+n_cv:]))
-
-        test_models(dataset_list, best_hyperparams, filestr, args.plotidx)
+        test_models(train, test, best_hyperparams, filestr, args.plotidx, nseeds=args.ntestseeds)
         

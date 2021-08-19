@@ -1,0 +1,1 @@
+{"gmm_ncomp": 9, "nflows": 4, "hdim": 12, "lr": 0.001, "iters": 1900, "flow_samples": 10000, "anf_ncomp": 40}
