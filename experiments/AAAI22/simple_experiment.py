@@ -63,16 +63,6 @@ def fit_nf_model(model, optimizer, train, cv, iters=1000, save_every=50):
                         f"Logprob_test: {logprob_test.mean().data:.2f}")
     return lp_list, iter_list
 
-#   hyperparams = {
-#        'gmm_ncomp': [6],
-#        'nflows': [10],
-#        'hdim': [10],
-#        'lr':[0.005],
-#        'iters':[500], # will do early stopping to choose best iteration number
-#        'flow_samples': [10000], #only training one 
-#        'anf_ncomp': [6],
-#    }
-
 def hyp_tune_gmm(train, cv, ncomps, nseeds=10):
     """
     Hyperparameter tune a gmm
@@ -107,13 +97,14 @@ def hyp_tune_gmm(train, cv, ncomps, nseeds=10):
     print('GMM LL means: {}'.format(means))
     return best_ncomp, best_ll
 
-def hyp_tune_nf(train, cv, hyp):
+def hyp_tune_nf(train, cv, hyp, nseeds=10):
     """
     Hyperparameter tune a normflow model
     Args:
         train
         cv
         hyp (dict): dictionary of hyperparameter choices
+        nseeds (int): number of time to try nf tuning with ifferent seeds
     Returns:
         best_nflows (int): best number of flows
         best_hdim (int): best number of hidden dimensions
@@ -129,7 +120,7 @@ def hyp_tune_nf(train, cv, hyp):
         for hdim in hyp['hdim']:
             for lr in hyp['lr']:
                 lps = []
-                for seed in range(5):
+                for seed in range(nseeds):
                     flows = [RealNVP(dim=dim, hidden_dim = hdim, 
                             base_network=FCNN) for _ in range(nflows)]
                     prior = D.MultivariateNormal(torch.zeros(dim), torch.eye(dim))
@@ -158,7 +149,7 @@ def hyp_tune_nf(train, cv, hyp):
     best_nf.eval()
     return best_nflows, best_hdim, best_lr, best_iters, best_nf
 
-def hyp_tune(train, cv, hyp, filestr):
+def hyp_tune(train, cv, hyp, filestr, nseeds=10):
     """
     Tune hyperparameters based on train set, cv set, and hyperparameter options.
     Saves best hyperparameter set
@@ -168,18 +159,19 @@ def hyp_tune(train, cv, hyp, filestr):
         cv: cv set
         hyp (dict): dictionary of lists of hyperparameter options
         filestr (dict): filestr to save best_hyperparams to
+        nseeds (int): number of different seeds to try with different models
     """ 
     # gmm
-    best_gmm_ncomp, _ = hyp_tune_gmm(train, cv, hyp['gmm_ncomp'])
+    best_gmm_ncomp, _ = hyp_tune_gmm(train, cv, hyp['gmm_ncomp'], nseeds=nseeds)
 
     # nf
-    best_nflows, best_hdim, best_lr, best_iters, best_nf = hyp_tune_nf(train, cv, hyp)
+    best_nflows, best_hdim, best_lr, best_iters, best_nf = hyp_tune_nf(train, cv, hyp, nseeds=nseeds)
 
     # anf
     best_anf_ll = -float('inf')
     for f in hyp['flow_samples']:
         many_samples = best_nf.sample(f).detach()
-        anf_ncomp, anf_ll = hyp_tune_gmm(many_samples, cv, hyp['anf_ncomp'])
+        anf_ncomp, anf_ll = hyp_tune_gmm(many_samples, cv, hyp['anf_ncomp'], nseeds=nseeds)
         if anf_ll > best_anf_ll:
             best_anf_ll = anf_ll
             best_anf_ncomp = anf_ncomp
@@ -327,11 +319,17 @@ def set_seeds(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     
-def make_dataset(nsamples, noise):
-    #data1 = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
-    #data2 = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
-    data3 = torch.rand(nsamples, 2).float()
-    return data3
+def make_dataset(method, nsamples):
+    
+    if method == 'moons':
+        noise = 0.05
+        data = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
+    elif method == 'square':
+        data = torch.rand(nsamples, 2).float()
+    else:
+        raise NotImplementedError    
+        #data = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
+    return data
 
 if __name__=='__main__':
     # parse arguments
@@ -344,55 +342,55 @@ if __name__=='__main__':
         action="store_true")
     parser.add_argument("--test", help="test stored hyperparameters",
         action="store_true")
-    parser.add_argument('-nseeds', default=10, type=int,
-        help='number of test seeds')    
+    parser.add_argument('-ntestseeds', default=10, type=int,
+        help='number of test seeds')
+    parser.add_argument('-ntuneseeds', default=10, type=int,
+        help='number of tuning seeds')      
     parser.add_argument('-ntrain', default=1000, type=int,
         help='number of training samples') 
     parser.add_argument('-ncv', default=200, type=int,
         help='number of cv samples')
-    parser.add_argument('-ntest', default=1000, type=int,
+    parser.add_argument('-ntest', default=5000, type=int,
         help='number of test samples')
     parser.add_argument('-plotidx', default=0, type=int,
-        help='index of seed to plot')                 
+        help='index of seed to plot')
+    parser.add_argument('-method', choices=['moons', 'square'], 
+        default='square', help='experiment')                   
     args = parser.parse_args()
 
     n_train, n_cv, n_test = args.ntrain, args.ncv, args.ntest
-    save_plot_number = args.plotidx
-    nseeds = args.nseeds
-    filestr = 'results/simple_moons'
-    
+    filestr = 'results/simple_' + args.method
     
     # early experiments: nflows, hdim, lr, iters  = (10, 10, 0.005, 500)
 
     hyperparams = {
-        'gmm_ncomp': [7,8,9, 10, 11],
-        'nflows': [5, 10, 15],
-        'hdim': [8, 12, 24],
+        'gmm_ncomp': [7, 8, 9, 10, 11],
+        'nflows': [4, 6, 8, 10, 15],
+        'hdim': [4, 8, 12, 24],
         'lr':[0.001, 0.005],
-        'iters':[2000], # will NOT do early stopping to choose best iteration number
+        'iters':[2500], # will do early stopping to choose best iteration number (so only include single high iters)
         'flow_samples': [100000],
-        'anf_ncomp': [5, 10, 15, 20],
+        'anf_ncomp': [5, 10, 12, 15, 17, 20],
     }
 
-    noise_level = 0.05
     if args.tune:
 
         set_seeds(0)
         n_samples = n_train + n_cv + n_test
-        dataset = make_dataset(n_samples, noise_level)
+        dataset = make_dataset(args.method, n_samples)
         train, cv, test = dataset[:n_train], dataset[n_train:n_train+n_cv], dataset[n_train+n_cv:]
-        hyp_tune(train, cv, hyperparams, filestr)
+        hyp_tune(train, cv, hyperparams, filestr, nseeds=args.ntuneseeds)
 
     if args.test:
         
         with open(filestr+'_best_hyperparams.json') as json_file:
             best_hyperparams = json.load(json_file)
         dataset_list = []
-        for i in range(nseeds):
+        for i in range(args.ntestseeds):
             set_seeds(i+1)
             n_samples = n_train + n_cv + n_test
-            dataset = make_dataset(n_samples, noise_level)
+            dataset = make_dataset(args.method, n_samples)
             dataset_list.append((dataset[:n_train], dataset[n_train+n_cv:]))
 
-        test_models(dataset_list, best_hyperparams, filestr, save_plot_number)
+        test_models(dataset_list, best_hyperparams, filestr, args.plotidx)
         
