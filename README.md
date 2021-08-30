@@ -31,9 +31,14 @@ To run experiments from the associated paper:
 
 1. Install and activate the environment.
 2. Follow directions in the `datasets` folder to download and process the OPENEI dataset.
-3. Navigate the the `experiments/IJCAI21/` folder and run the appropriate scripts:
-	- with, for example, `python ConditionalModels.py`
-		- ARMA, IFNN, IRNN models are in `IterativeModels.py`, CG and CGMM are in `ConditionalModels.py`, MOGP is in `MultiOutputGP.py`, JFNN is in `JFNN.py`, JRNN is in `JRNN.py`, and CANF is in`CANF.py`
-		- pick appropriate setting (location, input length, output length, etc.) by uncommenting appropriate line
-	- our multi-trial results, as well as run-rejection for outlier trials can be seen in `experiments/IJCAI21/results` (no CANF trials were rejected)
-	- plots can be generated with `python plots.py`
+3. Navigate the the `experiments/AAAI22/` folder and run the appropriate scripts:
+	- Toy Density Estimation:
+		- the best hyperparameter config from our experiments is saved in `experiments/AAAI22/results/simple_square_best_hyperparams.json`
+		- to run the experiment from the paper with this config, run `python simple_experiment.py --test`
+		- to retune hyperparameters based on a grid search with a grid defined in-file, run `python simple_experiment.py --tune`
+	- Electricity Demand Application
+		- with, for example, `python ConditionalModels.py`
+			- ARMA, IFNN, IRNN models are in `IterativeModels.py`, CG and CGMM are in `ConditionalModels.py`, MOGP is in `MultiOutputGP.py`, JFNN is in `JFNN.py`, JRNN is in `JRNN.py`, and CANF is in`CANF.py`
+			- pick appropriate setting (location, input length, output length, etc.) by uncommenting appropriate line
+		- our multi-trial results, as well as run-rejection for outlier trials can be seen in `experiments/AAAI22/results` (no CANF trials were rejected)
+		- plots can be generated with `python plots.py`
