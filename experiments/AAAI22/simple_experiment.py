@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-#import matplotlib2tikz as mpl2t
+import matplotlib.patches as patches
+import matplotlib2tikz as mpl2t
 import itertools
 import logging
 import os
@@ -191,7 +192,7 @@ def hyp_tune(train, cv, hyp, filestr, nseeds=10):
     with open(filestr+'_best_hyperparams.json', 'w') as outfile:
         json.dump(best_hyperparams, outfile)
 
-def test_models(train, test, hyp, filestr, save_plot_number, nseeds=10):
+def test_models(train, test, hyp, filestr, method, save_plot_number, nseeds=10):
     """
     Test tuned hyperparameters on newly sampled datasets
 
@@ -200,6 +201,7 @@ def test_models(train, test, hyp, filestr, save_plot_number, nseeds=10):
         test
         hyp (dict): dictionary of best hyperparameters
         filestr (dict): filestr to save plots to
+        method (str): method for dataset (used for plots)
         save_plot_number (int): index of plot to save
         nseeds (int): number of test seeds to try
     """
@@ -246,7 +248,7 @@ def test_models(train, test, hyp, filestr, save_plot_number, nseeds=10):
         if i == save_plot_number:
             
             plot_models = {'gmm':gmm,'nf':nf, 'anf':anf}
-            plot_train, plot_test = train.clone(), test.clone()
+            save_plots(plot_models, train, test, filestr, method)
 
     # Print
     gmm_lps, nf_lps, anf_lps = torch.tensor(gmm_lps), torch.tensor(nf_lps), torch.tensor(anf_lps)
@@ -260,11 +262,8 @@ def test_models(train, test, hyp, filestr, save_plot_number, nseeds=10):
     print('GMM LogProb Mean = %.03f \pm %.03f' %(torch.mean(gmm_lps), torch.std(gmm_lps)/(len(gmm_lps)**0.5)))
     print('NF LogProb Mean = %.03f \pm %.03f' %(torch.mean(nf_lps), torch.std(nf_lps)/(len(nf_lps)**0.5)))
     print('ANF LogProb Mean = %.03f \pm %.03f' %(torch.mean(anf_lps), torch.std(anf_lps)/(len(anf_lps)**0.5)))
-    
-    # Save plots
-    save_plots(plot_models, plot_train, plot_test, filestr)
 
-def save_plots(models, train, test, filestr, tikz=False):
+def save_plots(models, train, test, filestr, method, tikz=False):
     """
     Make and save plots given train and test set
     Args:
@@ -272,6 +271,7 @@ def save_plots(models, train, test, filestr, tikz=False):
         train (torch.tensor): (n_train, 2) train set
         test (torch.tensor): (n_test, 2) test set
         filestr: base filestring to save plots to
+        method: method with which to make plots
         tikz (bool): whether or not to save to tikz
     """
     X_train, Y_train = train[:,:1].unsqueeze(-1), train[:,1:].unsqueeze(-1)
@@ -282,7 +282,12 @@ def save_plots(models, train, test, filestr, tikz=False):
     plt.savefig(filestr+'_train_points.png')
 
     n=100
-    x, y = np.meshgrid(np.linspace(-1.5, 2.5, n), np.linspace(-1, 1.5, n))
+    if method == 'square':
+        min_x, min_y, max_x, max_y = -1, -1, 2, 2
+    else: 
+        raise NotImplementedError
+    
+    x, y = np.meshgrid(np.linspace(min_x, max_x, n), np.linspace(min_y, max_y, n))
     x = torch.tensor(x).float()
     y = torch.tensor(y).float()
     xrs = x.reshape((-1,1,1))
@@ -293,26 +298,32 @@ def save_plots(models, train, test, filestr, tikz=False):
 
     # gmm
     fig, ax = plt.subplots()
-    c=ax.pcolormesh(x, y, gmm_lp, vmin=-15)
-    ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    c=ax.pcolormesh(x, y, gmm_lp, vmin=-10, vmax=1)
+    #ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    ax.add_patch(patches.Rectangle((0, 0), 1, 1, linewidth=1, edgecolor='r', facecolor='none'))
     ax.axis([x.min(), x.max(), y.min(), y.max()])
-    fig.colorbar(c, ax=ax)
+    #fig.colorbar(c, ax=ax)
+    mpl2t.save(filestr+'_gmm.tex')
     plt.savefig(filestr+'_gmm.png')
 
     # nf
     fig, ax = plt.subplots()
-    c=ax.pcolormesh(x, y, nf_lp, vmin=-15)
-    ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    c=ax.pcolormesh(x, y, nf_lp, vmin=-10, vmax=1)
+    #ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    ax.add_patch(patches.Rectangle((0, 0), 1, 1, linewidth=1, edgecolor='r', facecolor='none'))
     ax.axis([x.min(), x.max(), y.min(), y.max()])
-    fig.colorbar(c, ax=ax)
+    #fig.colorbar(c, ax=ax)
+    mpl2t.save(filestr+'_nf.tex')
     plt.savefig(filestr+'_nf.png')
 
     # anf
     fig, ax = plt.subplots()
-    c=ax.pcolormesh(x, y, anf_lp, vmin=-15)
-    ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    c=ax.pcolormesh(x, y, anf_lp, vmin=-10, vmax=1)
+    #ax.scatter(X_test[:,0,0], Y_test[:,0,0], c='k')
+    ax.add_patch(patches.Rectangle((0, 0), 1, 1, linewidth=1, edgecolor='r', facecolor='none'))
     ax.axis([x.min(), x.max(), y.min(), y.max()])
-    fig.colorbar(c, ax=ax)
+    #fig.colorbar(c, ax=ax)
+    mpl2t.save(filestr+'_anf.tex')
     plt.savefig(filestr+'_anf.png')
 
 def set_seeds(seed):
@@ -322,13 +333,13 @@ def set_seeds(seed):
 def make_dataset(method, nsamples):
     
     if method == 'moons':
-        noise = 0.05
-        data = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
+        data = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=0.05)[0]).float()
+    elif method == 'circles':
+        data = torch.tensor(datasets.make_circles(n_samples=nsamples, factor=.5,noise=.05)[0]).float()
     elif method == 'square':
         data = torch.rand(nsamples, 2).float()
     else:
         raise NotImplementedError    
-        #data = torch.tensor(datasets.make_moons(n_samples=nsamples, noise=noise)[0]).float()
     return data
 
 if __name__=='__main__':
@@ -346,25 +357,20 @@ if __name__=='__main__':
         help='number of test seeds')
     parser.add_argument('-ntuneseeds', default=10, type=int,
         help='number of tuning seeds')      
-    parser.add_argument('-ntrain', default=1000, type=int,
-        help='number of training samples') 
-    parser.add_argument('-ncv', default=200, type=int,
-        help='number of cv samples')
-    parser.add_argument('-ntest', default=5000, type=int,
-        help='number of test samples')
     parser.add_argument('-plotidx', default=0, type=int,
         help='index of seed to plot')
-    parser.add_argument('-method', choices=['moons', 'square'], 
+    parser.add_argument('-method', choices=['moons', 'square', 'circles'], 
         default='square', help='experiment')                   
     args = parser.parse_args()
 
-    n_train, n_cv, n_test = args.ntrain, args.ncv, args.ntest
     filestr = 'results/simple_' + args.method
     
     if args.method == 'moons':
-        pass
-        # early experiments: nflows, hdim, lr, iters  = (10, 10, 0.005, 500)
+        raise NotImplementedError
+    elif args.method == 'circles':
+        raise NotImplementedError
     elif args.method == 'square':
+        n_train, n_cv, n_test = 1000, 200, 5000
         hyperparams = {
             'gmm_ncomp': [7, 8, 9, 10, 11],
             'nflows': [4, 6, 8, 10, 15],
@@ -390,5 +396,5 @@ if __name__=='__main__':
         
         with open(filestr+'_best_hyperparams.json') as json_file:
             best_hyperparams = json.load(json_file)
-        test_models(train, test, best_hyperparams, filestr, args.plotidx, nseeds=args.ntestseeds)
+        test_models(train, test, best_hyperparams, filestr, args.method, args.plotidx, nseeds=args.ntestseeds)
         
