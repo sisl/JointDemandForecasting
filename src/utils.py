@@ -7,6 +7,8 @@ import torch
 import gpytorch
 import random
 import math
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 def bmm(A,b):
     """
@@ -193,7 +195,39 @@ def train_mogp(model, likelihood, train_x, train_y, training_iter,
             print('Iter %d/%d - Mean Loss: %.3f' % (i + 1, training_iter, 
                                                     loss.item()/train_x.size(0)))
         optimizer.step()
+
+def train_nf(model, dataset, epochs=100, seed=0, val_every=100, lr=0.005):
     
+    # make joint train/val data
+    B_train, T, ind = dataset['X_train'].shape
+    _, K, outd = dataset['Y_train'].shape
+    B_val = dataset['X_test'].shape[0] 
+    combined = torch.cat((dataset['X_train'].reshape((B_train,-1)), dataset['Y_train'].reshape((B_train,-1))), -1)
+    combined_val = torch.cat((dataset['X_test'].reshape((B_val,-1)), dataset['Y_test'].reshape((B_val,-1))), -1)
+    
+    torch.manual_seed(seed)
+    x = combined[torch.randperm(B_train)]
+    x_val = combined_val[torch.randperm(B_val)]
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    logger = logging.getLogger(__name__)
+    for i in range(epochs):
+        optimizer.zero_grad()
+        z, prior_logprob, log_det = model(x)
+        logprob = prior_logprob + log_det
+        loss = -torch.mean(prior_logprob + log_det)
+        loss.backward()
+        optimizer.step()
+        if (i+1) % val_every == 0:
+            _, prior_logprob_val, log_det_val = model(x_val)
+            logprob_val = prior_logprob_val + log_det_val
+            logger.info(f"Iter: {i+1}\t" +
+                        f"Logprob: {logprob.mean().data:.2f}\t" +
+                        f"Prior: {prior_logprob.mean().data:.2f}\t" +
+                        f"LogDet: {log_det.mean().data:.2f}\t" + 
+                        f"Logprob_val: {logprob_val.mean().data:.2f}")
+
+
 def mape(dist, target, sampled=False):
     """ 
     Compute MAPE Loss. 

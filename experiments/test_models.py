@@ -78,7 +78,12 @@ def initialize_model(
                           n_components=ncomp, random_state=seed)
     
     elif model_name=='CANF':
-        raise NotImplementedError
+        ncomp = 25
+        nflows = 10
+        hdim = 32
+        model = ConditionalANF(1, past_dims, 1, fut_dims, 
+            hidden_dim=hdim, n_flows=nflows,     
+            n_components=ncomp, random_state=seed)
     else:
         raise NotImplementedError
     return model
@@ -127,7 +132,9 @@ def train_model(
         model.fit(dataset['X_train'], dataset['Y_train'])
     
     elif model_name=='CANF':
-        raise NotImplementedError
+        nsamp = 100000
+        model.fit(dataset, n_samples=nsamp, 
+            epochs=4000, seed=seed, val_every=100, lr=0.005) # train_kwargs
     else:
         raise NotImplementedError
     return model
