@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import src
 from src.utils import *
+from src.train_utils import train, train_mogp
+
 from experiments.charging_utils import *
 from src.models import *
 from typing import Optional, Dict
@@ -133,8 +135,10 @@ def train_model(
     
     elif model_name=='CANF':
         nsamp = 100000
+        ep = 500 # 4000
+        lr = 0.005
         model.fit(dataset, n_samples=nsamp, 
-            epochs=4000, seed=seed, val_every=100, lr=0.005) # train_kwargs
+            epochs=ep, seed=seed, val_every=100, lr=lr) # train_kwargs
     else:
         raise NotImplementedError
     return model
@@ -157,7 +161,12 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
             samples = model(mogp_data['test_x']).sample(torch.Size([n_samples]))
     
     elif model_name=='CANF':
-        raise NotImplementedError
+        dist = model(dataset['X_test'])
+        samples = []
+        for _ in range(n_samples//200):
+            s = dist.sample((200,))
+            samples.append(s) 
+        samples = torch.cat(samples,0)
     else:
         raise NotImplementedError
     return samples

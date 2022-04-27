@@ -4,7 +4,7 @@ import torch.distributions as D
 import numpy as np
 from sklearn.mixture import GaussianMixture
 
-from src.utils import train_nf
+from src.train_utils import train_nf
 from src.models.nf.flows import *
 from src.models.nf.models import *
 from src.models.cgmm import ConditionalGMM
@@ -81,8 +81,7 @@ class ConditionalANF(nn.Module):
         train_nf(self.nf, dataset, **train_kwargs)
         
         # generate samples
-        self.nf.eval()
-        samples = self.nf.sample(n_samples)
+        samples = self.nf.sample(n_samples).detach()
 
         # fit cgmmself.input_dim = input_dim
         self.cgmm.fit(samples[:,:self.T*self.input_dim].reshape((-1, self.T, self.input_dim)), 
