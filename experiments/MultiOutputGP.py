@@ -5,13 +5,10 @@ import torch
 import torch.nn as nn
 import gpytorch
 
-sys.path.append("../../")
-import JointDemandForecasting
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.mogp import *
-
-from load_data import load_data
-from charging_utils import *
+import src
+from src.utils import *
+from src.models.mogp import *
+from experiments.charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 

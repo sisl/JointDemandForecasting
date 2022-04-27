@@ -10,15 +10,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 
-sys.path.append("../../")
-import JointDemandForecasting
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.cgmm import *
-from JointDemandForecasting.models.nf.flows import *
-from JointDemandForecasting.models.nf.models import *
+import src
+from src.utils import *
+from src.models.cgmm import *
+from src.models.nf.flows import *
+from src.models.nf.models import *
 
 from load_data import load_data
-from charging_utils import *
+from experiments.charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 

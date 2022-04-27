@@ -12,13 +12,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 
-sys.path.append("../../")
-import JointDemandForecasting
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.cgmm import *
-from JointDemandForecasting.models.gmnn import *
-from JointDemandForecasting.models.nf.flows import *
-from JointDemandForecasting.models.nf.models import *
+import src
+from src.utils import *
+from src.models.cgmm import *
+from src.models.gmnn import *
+from src.models.nf.flows import *
+from src.models.nf.models import *
 from sklearn import datasets
 
 log_level = logging.ERROR # logging.DEBUG for verbose training, logging.ERROR for just errors
@@ -363,7 +362,7 @@ if __name__=='__main__':
         default='square', help='experiment')                   
     args = parser.parse_args()
 
-    filestr = 'results/simple_' + args.method
+    filestr = 'experiments/results/simple_' + args.method
     
     if args.method == 'moons':
         raise NotImplementedError

@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
-from JointDemandForecasting.models.nf.utils import unconstrained_RQS
+from src.models.nf.utils import unconstrained_RQS
 
 # supported non-linearities: note that the function must be invertible
 functional_derivatives = {

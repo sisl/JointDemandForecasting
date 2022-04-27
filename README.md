@@ -1,4 +1,4 @@
-# JointDemandForecasting.py
+# src.py
 A framework for multi-step probabilistic time-series/demand forecasting models. Code for "[Conditional Approximate Normalizing Flows for Joint Multi-Step Probabilistic Forecasting with Application to Electricity Demand](https://arxiv.org/pdf/2201.02753.pdf)". If you find this repository useful, please cite the following:
 
 ```
@@ -12,7 +12,7 @@ A framework for multi-step probabilistic time-series/demand forecasting models. 
 
 
 ## File stucture
-- `JointDemandForecasting` contains the source code for the package
+- `src` contains the source code for the package
 - `datasets` contains datasets pertaining to experiments.
 	- `datasets/raw` contains raw datasets
 	- `datasets/processed` contains processed datasets

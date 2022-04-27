@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.distributions as D
 import gpytorch
-
-from JointDemandForecasting.abstractmodels import *
 import numpy as np
 
 class MultiOutputGP(gpytorch.models.ExactGP):
@@ -12,6 +10,9 @@ class MultiOutputGP(gpytorch.models.ExactGP):
                  index_rank=2, random_state=None):
         
         B, num_tasks = train_y.shape
+        B2, past_dims = train_x.shape
+        assert B==B2, "nonmatching data batch size"
+        self.past_dims = past_dims
         self.num_tasks = num_tasks
         self.index_rank = index_rank
         self.random_state = random_state

@@ -4,15 +4,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-sys.path.append("../../")
-import JointDemandForecasting
+import src
+from src.utils import *
+from src.models.gmnn import *
+from src.models.blr import *
 
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.gmnn import *
-from JointDemandForecasting.models.blr import *
-
-from load_data import load_data
-from charging_utils import *
+from experiments.charging_utils import *
 
 ### Experiment Settings (uncomment one of these)
 

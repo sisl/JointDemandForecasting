@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.distributions as D
-from JointDemandForecasting.abstractmodels import *
 import numpy as np
 
-class BayesianLinearRegression(ExplicitPredictiveModel):
+class BayesianLinearRegression(nn.Module):
     """ 
 
     Class for prediction via Bayesian Linear Regression. 
@@ -40,7 +39,7 @@ class BayesianLinearRegression(ExplicitPredictiveModel):
             u (torch.tensor or None): (B, T+K, udim) inputs
             K (int): horizon to predict 
         Returns:
-            dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            dist (torch.Distribution): (B,K*ydim) predictive distribution over next K observations
         """
         if self.theta is None or self.b is None or self.Sigma_chol is None:
             raise NameError('Yet to fit model.')

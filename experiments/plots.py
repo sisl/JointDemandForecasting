@@ -10,20 +10,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 
-sys.path.append("../../")
-import JointDemandForecasting
-from JointDemandForecasting.utils import *
-from JointDemandForecasting.models.cgmm import *
-from JointDemandForecasting.models.gmnn import *
-from JointDemandForecasting.models.nf.flows import *
-from JointDemandForecasting.models.nf.models import *
-
-from load_data import load_data
+import src
+from src.utils import *
+from src.models.cgmm import *
+from src.models.gmnn import *
+from src.models.nf.flows import *
+from src.models.nf.models import *
 from charging_utils import *
 
 save_tex = True # whether to save the .tex files or .pngs
-if not os.path.isdir('figs'):
-    os.mkdir('figs')
+if not os.path.isdir('experiments/figs'):
+    os.makedirs('experiments/figs')
 
 ########## PLOTS ###############
 
@@ -119,15 +116,15 @@ plt.ylabel('Density')
 plt.grid(True)
 plt.legend(loc='upper left')
 if save_tex:
-    mpl2t.save('figs/likelihoods.tex')
+    mpl2t.save('experiments/figs/likelihoods.tex')
 else:
-    plt.savefig('figs/likelihoods.png')
+    plt.savefig('experiments/figs/likelihoods.png')
     plt.show()
     
 ### 1. Per-index error plot
 
 # Taken from running default models for 12 |8 in Bakersfield, CA, with seeds set to 0. 
-# The second return of the JointDemandForecasting.utils.rwse is per-index RWSE.
+# The second return of the src.utils.rwse is per-index RWSE.
 
 # fit IFNN and sample
 Y_train_single = Y_train[:,[0],:]
@@ -165,9 +162,9 @@ plt.xlabel('Future time index')
 plt.ylabel('Error metric')
 plt.grid(True)
 if save_tex:
-    mpl2t.save('figs/errors.tex')
+    mpl2t.save('experiments/figs/errors.tex')
 else:
-    plt.savefig('figs/errors.png')
+    plt.savefig('experiments/figs/errors.png')
     plt.show()
 
 ### 2. Sample Forecast Plot
@@ -253,8 +250,8 @@ handles, labels = axs[0,0].get_legend_handles_labels()
 #fig.legend(handles, labels, loc='upper center',ncol=3)
 axs[0,0].legend(loc='upper left')
 if save_tex:
-    mpl2t.save('figs/samples.tex')
+    mpl2t.save('experiments/figs/samples.tex')
 else:
-    plt.savefig('figs/samples.png')
+    plt.savefig('experiments/figs/samples.png')
     plt.show()
 

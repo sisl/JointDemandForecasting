@@ -1,17 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.distributions as D
-from JointDemandForecasting.abstractmodels import *
 import numpy as np
 
-class GaussianNeuralNet(ExplicitPredictiveModel):
+class GaussianMixtureNeuralNet(nn.Module):
     """ 
 
-    Class for probabilistic feedforward neural network using single MvGaussian. 
+    Class for probabilistic feedforward neural network using Gaussian Mixture Model. 
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0,
+                 n_components=3, covariance_type='diagonal', rank=2, bands=2, tied=False, dropout=0.0,
                  random_state=None):
         """ 
 
@@ -24,26 +23,34 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             hidden_layer_dims (list of ints): the hidden layer sizes in the neural network
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
+            n_componenets (int): number of components in the mixture model
             covariance_type (string): 'diagonal', 'full', 'low-rank', or 'banded'
             rank (int): rank of low-rank covariance matrix
             bands (int): number of off-diagonal bands in banded covariance matrix
+            tied (bool): if True, predict the same covariance for each component in mixture
             dropout (float): dropout probability
             random_state (int): seed to manually set RNG
         """ 
-        super(GaussianNeuralNet, self).__init__()
+        super(GaussianMixtureNeuralNet, self).__init__()
         self.input_dim = input_dim
         self.T = input_horizon
         self.hidden_layer_dims = hidden_layer_dims
         self.output_dim = output_dim
         self.K = prediction_horizon
+        self.n_components = n_components
+        if n_components == 1:
+            raise("Number of components = 1, use GaussianNeuralNet class")
         self.covariance_type = covariance_type
         self.rank = rank
         self.bands = bands
+        self.tied = tied
+        if self.tied:
+            raise("Tied covariances not yet implemented")
         self.dropout = dropout
         self.random_state = random_state
         if random_state is not None:
             torch.manual_seed(self.random_state)
-            
+        
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
@@ -59,7 +66,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
         elif self.covariance_type == 'low-rank':
-            self._num_cov = self.output_dim*self.K*(self.rank+1)
+            self._num_cov = self.output_dim*self.K*(self.rank+1) 
         elif self.covariance_type == 'banded':
             if self.bands < 1 or self.bands > self.output_dim*self.K-1:
                 raise("Invalid number of bands")
@@ -74,7 +81,7 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
         else:
             raise("Invalid covariance type %s." %(self.covariance_type))
 
-        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
+        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self.n_components*(1+self._num_means+self._num_cov)))
         self.fc = nn.Sequential(*fc_net)
         
     def forward(self, y, u=None, K=None):
@@ -86,58 +93,71 @@ class GaussianNeuralNet(ExplicitPredictiveModel):
             u (torch.tensor or None): (B, T+K, udim) inputs
             K (int): horizon to predict 
         Returns:
-            dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations
+            dist (torch.Distribution): (B,K*ydim) predictive distribution over next K observations
         """
         
         B, T, ydim = y.shape
         inputs = y.reshape((B, T*ydim))
         outputs = self.fc(inputs)
         B, outdims = outputs.shape
-        mu = outputs[:,:self._num_means]
+        
+        probs = nn.functional.softmax(outputs[:,:self.n_components],1)
+        mix = D.Categorical(probs)
+        
+        means_endidx = self.n_components*(self._num_means+1)
+        mu = outputs[:,self.n_components:means_endidx].reshape(B, self.n_components, self._num_means)
         
         # full covariance matrix
         if self.covariance_type == 'full':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
             
-            L = torch.zeros(B,self._num_means,self._num_means)
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
             indices = torch.tril_indices(self._num_means, self._num_means, -1)
-            L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            L[:,indices[0], indices[1]] = offdiag
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,indices[0], indices[1]] = offdiag
             
-            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
-            sig = torch.exp(outputs[:,self._num_means:])
+            sig = torch.exp(outputs[:,means_endidx:]).reshape(B, self.n_components, self._num_means)
             dist = D.Normal(loc=mu, scale=sig)
+            comp = D.Independent(dist,1)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
-            dist = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            factor = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, self._num_means, self.rank)
+            comp = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
         
         # banded covariance matrix
         elif self.covariance_type == 'banded':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
 
-            L = torch.zeros(B,self._num_means,self._num_means)
-            L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            L[:,self._band_indices[0], self._band_indices[1]] = offdiag
-            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,self._band_indices[0], self._band_indices[1]] = offdiag
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
+        
+        
+        dist = D.MixtureSameFamily(mix, comp)
         return dist
     
-class GaussianLSTM(ExplicitPredictiveModel):
+class GaussianMixtureLSTM(nn.Module):
     """ 
 
-    Class for sequence-to-sequence probabilistic LSTM using single MvGaussian. 
+    Class for sequence-to-sequence probabilistic LSTM using a Gaussian Mixture Model. 
     
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
-                 covariance_type='diagonal', rank=2, bands=2,
-                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False,
+                 n_components=3, covariance_type='diagonal', rank=2, tied=False,
+                 num_layers=1, dropout=0.0, bidirectional=False, random_start=True,
                  random_state=None):
         """ 
 
@@ -150,16 +170,17 @@ class GaussianLSTM(ExplicitPredictiveModel):
             fc_hidden_layer_dims (list of ints): the hidden layer sizes in the neural network mapping from hidden state to output
             output_dim (int): the dimension of the outputs at each point in the sequence
             prediction_horizon (int): the prediction horizon K
-            covariance_type (string): 'diagonal', 'full', 'low-rank', or 'banded'
+            n_componenets (int): number of components in the mixture model
+            covariance_type (string): 'diagonal', 'full', or 'low-rank'
             rank (int): rank of low-rank covariance matrix
-            bands (int): number of off-diagonal bands in banded covariance matrix
+            tied (bool): if True, predict the same covariance for each component in mixture
             num_layers (int): number of layers in a possibly stacked LSTM
             dropout (float): the dropout rate of the lstm
             bidirectional (bool): whether to initialize a bidirectional lstm
             random_start (bool): If true, will initialize the hidden states randomly from a unit Gaussian
             random_state (int): seed to manually set RNG
         """ 
-        super(GaussianLSTM, self).__init__()
+        super(GaussianMixtureLSTM, self).__init__()
         
         # dimensional parameters
         self.input_dim = input_dim
@@ -167,10 +188,15 @@ class GaussianLSTM(ExplicitPredictiveModel):
         self.fc_hidden_layer_dims = fc_hidden_layer_dims
         self.output_dim = output_dim
         self.K = prediction_horizon
+        self.n_components = n_components
+        if n_components == 1:
+            raise("Number of components = 1, use GaussianNeuralNet class")
         self.covariance_type = covariance_type
         self.rank = rank
-        self.bands = bands
-              
+        self.tied = tied
+        if self.tied:
+            raise("Tied covariances not yet implemented")
+        
         # LSTM parameters
         self.num_layers = num_layers
         self.dropout = dropout
@@ -197,17 +223,11 @@ class GaussianLSTM(ExplicitPredictiveModel):
         elif self.covariance_type == 'diagonal':
             self._num_cov = self.output_dim*self.K
         elif self.covariance_type == 'low-rank':
-            self._num_cov = self.output_dim*self.K*(self.rank+1)        
-        elif self.covariance_type == 'banded':
-            if self.bands < 1 or self.bands > self.output_dim*self.K-1:
-                raise("Invalid number of bands")
-            self._num_cov = 0
-            for i in range(self.bands+1):
-                self._num_cov += n-i 
+            self._num_cov = self.output_dim*self.K*(self.rank+1) 
         else:
             raise("Invalid covariance type %s." %(self.covariance_type))
             
-        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
+        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self.n_components*(1+self._num_means+self._num_cov)))
         self.fc = nn.Sequential(*fc_net)
         
     def forward(self, y, u=None, K=None):
@@ -219,7 +239,7 @@ class GaussianLSTM(ExplicitPredictiveModel):
             u (torch.tensor or None): (B, T+K, udim) inputs
             K (int): horizon to predict 
         Returns:
-            dist (PredictiveDistribution): (B, K*ydim) predictive distribution over next K observations
+            dist (torch.Distribution): (B, K*ydim) predictive distribution over next K observations
         """
         
         h_0, c_0 = self.initialize_lstm(y)    
@@ -270,49 +290,44 @@ class GaussianLSTM(ExplicitPredictiveModel):
                 each point in each sequence. 
 
         Returns: 
-            dist (PredictiveDistribution): (B,K*ydim) predictive distribution over next K observations shaped
+            dist (torch.Distribution): (B,K*ydim) predictive distribution over next K observations shaped
 
         """ 
         outputs = self.fc(h_n)
-        # outputs will be (B, 2*K*ydims)
         B, outdims = outputs.shape
-        mu = outputs[:,:self._num_means]
+        
+        probs = nn.functional.softmax(outputs[:,:self.n_components],1)
+        mix = D.Categorical(probs)
+        
+        means_endidx = self.n_components*(self._num_means+1)
+        mu = outputs[:,self.n_components:means_endidx].reshape(B, self.n_components, self._num_means)
         
         # full covariance matrix
         if self.covariance_type == 'full':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            offdiag = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, -1)
             
-            L = torch.zeros(B,self._num_means,self._num_means)
+            L = torch.zeros(B, self.n_components, self._num_means, self._num_means)
             indices = torch.tril_indices(self._num_means, self._num_means, -1)
-            L[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            L[:,indices[0], indices[1]] = offdiag
+            L[:,:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
+            L[:,:,indices[0], indices[1]] = offdiag
             
-            dist = D.MultivariateNormal(loc=mu, scale_tril=L)
+            comp = D.MultivariateNormal(loc=mu, scale_tril=L)
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
-            sig = torch.exp(outputs[:,self._num_means:])
+            sig = torch.exp(outputs[:,means_endidx:]).reshape(B, self.n_components, self._num_means)
             dist = D.Normal(loc=mu, scale=sig)
+            comp = D.Independent(dist,1)
             
         # low-rank covariance matrix
         elif self.covariance_type == 'low-rank':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            factor = outputs[:,2*self._num_means:].reshape(B, self._num_means, self.rank)
-            dist = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
-
-        # banded covariance matrix
-        elif self.covariance_type == 'banded':
-            diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
-            offdiag = outputs[:,2*self._num_means:]
-            r = outdims-2*self._num_means
-            
-            S = torch.zeros(B,self._num_means,self._num_means)
-            indices = torch.tril_indices(self._num_means, self._num_means, -1)
-            S[:,torch.arange(self._num_means),torch.arange(self._num_means)] = diag
-            S[:,indices[0][:r], indices[1][:r]] = offdiag
-            S[:,indices[1][:r], indices[0][:r]] = offdiag
-            dist = D.MultivariateNormal(loc=mu, covariance_matrix=S)
-        
+            n_diags = self.n_components*self._num_means
+            diag = torch.exp(outputs[:,means_endidx:means_endidx+n_diags]).reshape(B, self.n_components, self._num_means)
+            factor = outputs[:,means_endidx+n_diags:].reshape(B, self.n_components, self._num_means, self.rank)
+            comp = D.LowRankMultivariateNormal(loc=mu, cov_factor=factor, cov_diag=diag)
+                           
+        dist = D.MixtureSameFamily(mix, comp)
         return dist
         
