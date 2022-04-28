@@ -1,6 +1,7 @@
 from tqdm import tqdm 
 import torch
 import torch.nn as nn
+import gpytorch
 import src
 from src.utils import *
 from src.train_utils import train, train_mogp
@@ -185,10 +186,10 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
         'Y_test':Y_test}
 
     mogp_data = {
-        'train_x': X_train.reshape(X_train.size(0),-1),
-        'train_y': Y_train.reshape(Y_train.size(0),-1),
-        'test_x': X_test.reshape(X_test.size(0),-1),
-        'test_y': Y_test.reshape(Y_test.size(0),-1),
+        'train_x': X_train.reshape(X_train.size(0),-1).contiguous(),
+        'train_y': Y_train.reshape(Y_train.size(0),-1).contiguous(),
+        'test_x': X_test.reshape(X_test.size(0),-1).contiguous(),
+        'test_y': Y_test.reshape(Y_test.size(0),-1).contiguous(),
         } if model_name=='MOGP' else None
 
     # loop through and save wapes, rwses, dscores [ignoring nlls, train nlls]
