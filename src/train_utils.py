@@ -2,6 +2,7 @@ import torch
 import gpytorch
 import logging
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # loss functions
 def nll(dist, target):
@@ -25,8 +26,12 @@ def nll(dist, target):
     return nll, nlls
 
 # training functions
-def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Adam,
-          learning_rate=0.01, verbose=True, weighting=None):
+def train(model, dataset, 
+    epochs=20, 
+    optimizer = torch.optim.Adam,
+    learning_rate=0.01,
+    log_every=10, 
+    ):
     """ 
     Train a regular model. 
 
@@ -37,62 +42,63 @@ def train(model, X_batches, Y_batches, num_epochs=20, optimizer = torch.optim.Ad
         num_epochs (int): number of times to iterate through all batches
         optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
-        verbose (bool): if true, print epoch losses
     """                                                        
     optimizer = optimizer(model.parameters(), lr=learning_rate)
     
     # Train the model
-    for epoch in range(num_epochs):
+    for epoch in range(epochs):
         epoch_loss = 0
-        for x, y in zip(X_batches, Y_batches):
+        for x, y in zip(dataset['X_batches'], dataset['Y_batches']):
             optimizer.zero_grad()
             
             dist = model(x)
             loss, _ = nll(dist, y)
             loss.backward()
             optimizer.step()
-            epoch_loss += loss.item()/len(X_batches)
+            epoch_loss += loss.item()/len(dataset['X_batches'])
 
-        if verbose and (num_epochs < 100 or epoch % 10 == 0):
-            print ("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
+        if (epoch+1) % log_every == 0:
+            logger.info("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
             
-    if verbose:
-        print ("Learning finished!")
         
-        
-        
-def train_mogp(model, likelihood, train_x, train_y, training_iter, 
-               optimizer = torch.optim.Adam, learning_rate=0.05, verbose=True):
+def train_mogp(model, dataset, 
+    epochs=40,
+    optimizer = torch.optim.Adam, 
+    lr=0.05, 
+    log_every=5):
     """ 
     Train a Multi-Output Gaussian Process model. 
 
     Args: 
         model: gpytorch model to train.
-        likelihood: gpytorch likelihood function.
         train_x (torch tensor): (B,in_length)-sized tensor of training inputs
         train_y (torch tensor): (B,out_length)-sized tensor of training inputs
-        training_iter (int): number of times to iterate through data
+        epochs (int): number of times to iterate through data
         optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
         verbose (bool): if true, print epoch losses
     """
     model.train()
-    likelihood.train()
+    model.likelihood.train()
     optimizer = optimizer([  
-        {'params': model.parameters()}], lr=learning_rate)
-    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
-    for i in range(training_iter):
+        {'params': model.parameters()}], lr=lr)
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(model.likelihood, model)
+    for i in range(epochs):
         optimizer.zero_grad()
-        output = model(train_x)
-        loss = -mll(output, train_y)
+        output = model(dataset['train_x'])
+        loss = -mll(output, dataset['train_y'])
         loss.backward()
-        if verbose and i%5==0:
-            print('Iter %d/%d - Mean Loss: %.3f' % (i + 1, training_iter, 
-                                                    loss.item()/train_x.size(0)))
+        if (i+1) % log_every==0:
+            logger.info('Iter %d/%d - Mean Loss: %.3f' % (i + 1, 
+                epochs, loss.item()/dataset['train_x'].size(0)))
         optimizer.step()
 
 def train_nf(model, dataset, 
-    epochs=100, seed=0, val_every=100, lr=0.005, optimizer = torch.optim.Adam):
+    epochs=100, 
+    seed=0, 
+    val_every=100, 
+    lr=0.005, 
+    optimizer=torch.optim.Adam):
     """ 
     Train a normalizing flow model model. 
 
@@ -117,7 +123,6 @@ def train_nf(model, dataset,
     x_val = combined_val[torch.randperm(B_val)]
 
     optimizer = optimizer(model.parameters(), lr=lr)
-    logger = logging.getLogger(__name__)
     for i in range(epochs):
         optimizer.zero_grad()
         z, prior_logprob, log_det = model(x)

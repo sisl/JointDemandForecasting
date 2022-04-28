@@ -73,4 +73,4 @@ class BayesianLinearRegression(nn.Module):
         
         self.theta = SXY.T @ SXX.inverse()
         self.b = muY - self.theta @ muX
-        self.Sigma_chol = (SYY - self.theta @ SXY).cholesky()
+        self.Sigma_chol = torch.linalg.cholesky(SYY - self.theta @ SXY)

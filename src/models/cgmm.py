@@ -111,7 +111,7 @@ class ConditionalGMM(nn.Module):
         self.b = self.mu_[:,ind:] - torch.matmul(self.theta, self.mu_[:,:ind].unsqueeze(-1)).squeeze(-1)
         self.input_gaussians = [D.MultivariateNormal(self.mu_[i,:ind], 
                                                      self.var_[i, :ind, :ind]) for i in range(self.n_components)]
-        self.Sigma_chol = (self.var_[:,ind:,ind:] - torch.matmul(self.theta, self.var_[:,:ind,ind:])).cholesky()
+        self.Sigma_chol = torch.linalg.cholesky(self.var_[:,ind:,ind:] - torch.matmul(self.theta, self.var_[:,:ind,ind:]))
         
     def log_prob(self, x, y):
         """ 

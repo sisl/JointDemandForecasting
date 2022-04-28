@@ -104,32 +104,36 @@ def train_model(
     
     elif model_name=='IFNN':
         X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'][:,[0],:], batch_size = 64, random_state = seed)
-        train(model, X_batches, Y_batches, num_epochs=150, learning_rate=.005, verbose=False)
+        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
+        train(model, batches, epochs=150, learning_rate=.005)
     
     elif model_name=='IRNN':
         X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'][:,[0],:], batch_size = 64, random_state = seed)
-        train(model, X_batches, Y_batches, num_epochs=200, learning_rate=.005, verbose=False)
+        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
+        train(model, batches, epochs=200, learning_rate=.005)
     
     elif model_name=='CG':
         model.fit(dataset['X_train'], dataset['Y_train'])
     
     elif model_name=='JFNN':
         X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'], batch_size = 64, random_state = seed)
-        train(model, X_batches, Y_batches, num_epochs=300, learning_rate=.002, verbose = False)
+        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
+        train(model, batches, epochs=300, learning_rate=.002)
     
     elif model_name=='JRNN':
         X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'], batch_size = 64, random_state = seed)
-        train(model, X_batches, Y_batches, num_epochs=200, learning_rate=.005, verbose=False)
+        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
+        train(model, batches, epochs=200, learning_rate=.005)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
         if model.past_dims==8:
-            epochs = 55
+            ep = 55
         elif model.past_dims==24:
-            epochs = 75
+            ep = 75
         else:
             raise NotImplementedError
-        train_mogp(model, model.likelihood, mogp_data['train_x'], mogp_data['train_y'], epochs, verbose=False)
+        train_mogp(model, mogp_data, epochs=ep)
     
     elif model_name=='CGMM':
         model.fit(dataset['X_train'], dataset['Y_train'])
