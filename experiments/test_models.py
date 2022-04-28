@@ -100,28 +100,28 @@ def train_model(
     **train_kwargs):
 
     if model_name=='ARMA':
-        model.fit(dataset['X_train'], dataset['Y_train'][:,[0],:])
+        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:])
     
     elif model_name=='IFNN':
-        X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'][:,[0],:], batch_size = 64, random_state = seed)
+        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:], batch_size = 64, random_state = seed)
         batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
         train(model, batches, epochs=150, learning_rate=.005)
     
     elif model_name=='IRNN':
-        X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'][:,[0],:], batch_size = 64, random_state = seed)
+        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:], batch_size = 64, random_state = seed)
         batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
         train(model, batches, epochs=200, learning_rate=.005)
     
     elif model_name=='CG':
-        model.fit(dataset['X_train'], dataset['Y_train'])
+        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
     
     elif model_name=='JFNN':
-        X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'], batch_size = 64, random_state = seed)
+        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'], batch_size = 64, random_state = seed)
         batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
         train(model, batches, epochs=300, learning_rate=.002)
     
     elif model_name=='JRNN':
-        X_batches, Y_batches = batch(dataset['X_train'], dataset['Y_train'], batch_size = 64, random_state = seed)
+        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'], batch_size = 64, random_state = seed)
         batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
         train(model, batches, epochs=200, learning_rate=.005)
     
@@ -136,7 +136,7 @@ def train_model(
         train_mogp(model, mogp_data, epochs=ep)
     
     elif model_name=='CGMM':
-        model.fit(dataset['X_train'], dataset['Y_train'])
+        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
     
     elif model_name=='CANF':
         nsamp = 100000
@@ -149,16 +149,16 @@ def train_model(
     return model
 
 def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000):
-    fut_dims = dataset['Y_train'].shape[1]
+    fut_dims = dataset['train'][:]['y'].shape[1]
     model.eval()
     if model_name in ['ARMA','IFNN']:
-        samples = sample_forward(model, dataset['X_test'], fut_dims, n_samples=n_samples)
+        samples = sample_forward(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
     
     elif model_name=='IRNN':
-        samples = sample_forward_lstm(model, dataset['X_test'], fut_dims, n_samples=n_samples)
+        samples = sample_forward_lstm(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
     
     elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM']:
-        samples = model(dataset['X_test']).sample((n_samples,))
+        samples = model(dataset['test'][:]['x']).sample((n_samples,))
 
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
@@ -166,7 +166,7 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
             samples = model(mogp_data['test_x']).sample(torch.Size([n_samples]))
     
     elif model_name=='CANF':
-        dist = model(dataset['X_test'])
+        dist = model(dataset['test'][:]['x'])
         samples = []
         for _ in range(n_samples//200):
             s = dist.sample((200,))
@@ -182,18 +182,13 @@ def tune():
 def test(model_name, loc, past_dims, fut_dims, nseeds):
 
     # get dataset
-    X_train, Y_train, X_test, Y_test = load_data(loc, past_dims, fut_dims)
-    dataset = {
-        'X_train':X_train,
-        'Y_train':Y_train,
-        'X_test':X_test,
-        'Y_test':Y_test}
+    dataset = load_data(loc, past_dims, fut_dims)
 
     mogp_data = {
-        'train_x': X_train.reshape(X_train.size(0),-1).contiguous(),
-        'train_y': Y_train.reshape(Y_train.size(0),-1).contiguous(),
-        'test_x': X_test.reshape(X_test.size(0),-1).contiguous(),
-        'test_y': Y_test.reshape(Y_test.size(0),-1).contiguous(),
+        'train_x': dataset['train'][:]['x'].reshape(dataset['train'][:]['x'].size(0),-1).contiguous(),
+        'train_y': dataset['train'][:]['y'].reshape(dataset['train'][:]['y'].size(0),-1).contiguous(),
+        'test_x': dataset['test'][:]['x'].reshape(dataset['test'][:]['x'].size(0),-1).contiguous(),
+        'test_y': dataset['test'][:]['y'].reshape(dataset['test'][:]['y'].size(0),-1).contiguous(),
         } if model_name=='MOGP' else None
 
     # loop through and save wapes, rwses, dscores [ignoring nlls, train nlls]
@@ -212,13 +207,13 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
         
         # test
         samples = generate_samples(model_name, model, dataset, n_samples=1000, mogp_data=mogp_data)
-        metrics['WAPE'].append(wape(samples,Y_test, sampled=True)[0])
-        metrics['RWSE'].append(rwse(samples,Y_test, sampled=True)[0])
+        metrics['WAPE'].append(wape(samples,dataset['test'][:]['y'], sampled=True)[0])
+        metrics['RWSE'].append(rwse(samples,dataset['test'][:]['y'], sampled=True)[0])
         #nlls.append(nll(dist,Y_test)[0])
         #trnlls.append(nll(dist_tr,Y_train)[0])
         min_indices = 4
         obj_fn = lambda x: var(x, 0.8)
-        metrics['DScore'].append(index_allocation(samples, min_indices, obj_fn, dataset['Y_test'], 0.8))
+        metrics['DScore'].append(index_allocation(samples, min_indices, obj_fn, dataset['test'][:]['y'], 0.8))
     
     print(f'{model_name} Metrics:')
     for metric_key in metrics.keys():

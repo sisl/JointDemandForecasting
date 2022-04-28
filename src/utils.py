@@ -5,6 +5,33 @@
 import torch
 import random
 import math
+from torch.utils.data import Dataset
+from typing import Dict
+
+class SequenceDataset(Dataset):
+  """
+  Implements a torch dataset for sequence data
+  """
+  def __init__(self, data:Dict[str,torch.Tensor]):
+    """
+    Args:
+      data (dict): dict with keys
+        x (torch.tensor): (B, past_steps, dim) input time series
+        y (torch.tensor): (B, fut_steps, dim2) target time series
+    """
+    self.data_keys = ['x','y']
+    assert all([k in data.keys() for k in self.data_keys]), 'missing data keys'
+    assert all([data[k].ndim==3 for k in self.data_keys]), 'improper data dimensions'
+    self.data = data
+    self.B = len(data['x'])
+    assert all([self.B == len(data[k]) for k in self.data_keys]), 'batch length mismatch'
+  
+  def __len__(self):
+    return self.B
+
+  def __getitem__(self, idx):
+    return {key: self.data[key][idx] for key in self.data_keys}
+
 
 def bmm(A,b):
     """
@@ -94,11 +121,17 @@ def batch(X, Y, batch_size=32, random_state=0):
         Y_batches.append(Y[i*batch_size:(i+1)*batch_size])
     return (X_batches, Y_batches)
 
-def load_data(loc, past_dims, fut_dims, path_x=None, path_y=None):
+def load_data(loc, past_dims, fut_dims, path_x=None, path_y=None)->Dict[str,SequenceDataset]:
     """
     Load x and y openEI from path, and perform sequence length preprocessing and train/test split.
+
+    Returns:
+        datasets (dict): dictionary with the following fields:
+            train (SequenceDataset): training dataset
+            val (SequenceDataset): validation dataset
+            test (SequenceDataset): testing dataset
     """
-     
+    assert past_dims+fut_dims <= 36, "too many total dimensions in sequence lengths" 
     if path_x is None:
         path_x = "datasets/processed/openEI/X_openei_011_subset_multitask.pt"
     if path_y is None:
@@ -120,11 +153,12 @@ def load_data(loc, past_dims, fut_dims, path_x=None, path_y=None):
     test_joint = torch.cat((X_test, Y_test),1)
 
     # Re-split into appropriate lengths
-    X_train = train_joint[:,:past_dims,:] #(B, i, 1)
-    Y_train = train_joint[:,past_dims:past_dims+fut_dims,:] #(B, o, 1)
-    X_test = test_joint[:,:past_dims,:] #(B, i, 1)
-    Y_test = test_joint[:,past_dims:past_dims+fut_dims,:] #(B, o, 1)
-    return X_train, Y_train, X_test, Y_test
+    datasets = {
+        'train': SequenceDataset({'x':train_joint[:,:past_dims], 'y':train_joint[:,past_dims:past_dims+fut_dims]}),
+        'val': SequenceDataset({'x':test_joint[:,:past_dims], 'y':test_joint[:,past_dims:past_dims+fut_dims]}),
+        'test': SequenceDataset({'x':test_joint[:,:past_dims], 'y':test_joint[:,past_dims:past_dims+fut_dims]}),
+    } 
+    return datasets
 
 def mape(dist, target, sampled=False):
     """ 

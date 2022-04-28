@@ -1,3 +1,5 @@
+from src.utils import SequenceDataset
+from typing import Dict
 import torch
 import gpytorch
 import logging
@@ -93,7 +95,7 @@ def train_mogp(model, dataset,
                 epochs, loss.item()/dataset['train_x'].size(0)))
         optimizer.step()
 
-def train_nf(model, dataset, 
+def train_nf(model, dataset:Dict[str,SequenceDataset], 
     epochs=100, 
     seed=0, 
     val_every=100, 
@@ -112,11 +114,11 @@ def train_nf(model, dataset,
         optimizer (torch.optim): torch optimizer
     """
     # make joint train/val data
-    B_train, T, ind = dataset['X_train'].shape
-    _, K, outd = dataset['Y_train'].shape
-    B_val = dataset['X_test'].shape[0] 
-    combined = torch.cat((dataset['X_train'].reshape((B_train,-1)), dataset['Y_train'].reshape((B_train,-1))), -1)
-    combined_val = torch.cat((dataset['X_test'].reshape((B_val,-1)), dataset['Y_test'].reshape((B_val,-1))), -1)
+    B_train, T, ind = dataset['train'][:]['x'].shape
+    _, K, outd = dataset['train'][:]['y'].shape
+    B_val = dataset['val'][:]['x'].shape[0] 
+    combined = torch.cat((dataset['train'][:]['x'].reshape((B_train,-1)), dataset['train'][:]['y'].reshape((B_train,-1))), -1)
+    combined_val = torch.cat((dataset['val'][:]['x'].reshape((B_val,-1)), dataset['val'][:]['y'].reshape((B_val,-1))), -1)
     
     torch.manual_seed(seed)
     x = combined[torch.randperm(B_train)]
