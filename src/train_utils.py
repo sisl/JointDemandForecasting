@@ -102,7 +102,6 @@ def train_mogp(model, dataset,
 
 def train_nf(model, dataset:Dict[str,SequenceDataset], 
     epochs=100, 
-    seed=0, 
     val_every=100, 
     lr=0.005, 
     optimizer=torch.optim.Adam):
@@ -113,7 +112,6 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         model: normalizing flow model to train
         dataset: dataset with input output pairs to fit joint nf over
         epochs (int): number of epochs for training
-        seed (int): seed for shuffling data
         val_every (int): interval for validation
         learning_rate (float): learning rate for Adam optimizer
         optimizer (torch.optim): torch optimizer
@@ -125,7 +123,6 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
     combined = torch.cat((dataset['train'][:]['x'].reshape((B_train,-1)), dataset['train'][:]['y'].reshape((B_train,-1))), -1)
     combined_val = torch.cat((dataset['val'][:]['x'].reshape((B_val,-1)), dataset['val'][:]['y'].reshape((B_val,-1))), -1)
     
-    torch.manual_seed(seed)
     x = combined[torch.randperm(B_train)]
     x_val = combined_val[torch.randperm(B_val)]
 

@@ -7,7 +7,7 @@ import numpy as np
 class MultiOutputGP(gpytorch.models.ExactGP):
     def __init__(self, train_x, train_y, likelihood,
                  covar_kernel=gpytorch.kernels.RBFKernel(), 
-                 index_rank=2, random_state=None):
+                 index_rank=2):
         
         B, num_tasks = train_y.shape
         B2, past_dims = train_x.shape
@@ -15,9 +15,6 @@ class MultiOutputGP(gpytorch.models.ExactGP):
         self.past_dims = past_dims
         self.num_tasks = num_tasks
         self.index_rank = index_rank
-        self.random_state = random_state
-        if self.random_state is not None:
-            torch.manual_seed(self.random_state)
         
         super(MultiOutputGP, self).__init__(train_x, train_y, likelihood)
         self.mean_module = gpytorch.means.MultitaskMean(

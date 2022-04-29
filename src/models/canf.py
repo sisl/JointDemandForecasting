@@ -19,7 +19,7 @@ class ConditionalANF(nn.Module):
         self, 
         input_dim, input_horizon, output_dim, prediction_horizon, 
         hidden_dim=8, n_flows = 4,            
-        n_components=2, random_state=None, # CGMM parameters
+        n_components=2, # CGMM parameters
         ):
         """ 
 
@@ -33,7 +33,6 @@ class ConditionalANF(nn.Module):
             prediction_horizon (int): the prediction horizon K
 
             n_components (int): the number of mixture components for CGMM
-            random_state (int): default random_state
         """ 
         super(ConditionalANF, self).__init__()
         self.input_dim = input_dim
@@ -49,9 +48,9 @@ class ConditionalANF(nn.Module):
                         base_network=FCNN) for _ in range(n_flows)]
         prior = D.MultivariateNormal(torch.zeros(self.nf_dims),
                                 torch.eye(self.nf_dims))
-        self.nf = NormalizingFlowModel(prior, flows, random_state=random_state)
+        self.nf = NormalizingFlowModel(prior, flows)
         self.cgmm = ConditionalGMM(input_dim, input_horizon, output_dim, prediction_horizon, 
-            n_components=n_components, random_state=random_state)
+            n_components=n_components)
         
     def forward(self, y, u=None, K=None):
         """ 

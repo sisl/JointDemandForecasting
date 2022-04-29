@@ -11,7 +11,7 @@ class ConditionalGMM(nn.Module):
     
     """     
     def __init__(self, input_dim, input_horizon, output_dim, prediction_horizon, 
-                 n_components=2, random_state=None):
+                 n_components=2):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -23,7 +23,6 @@ class ConditionalGMM(nn.Module):
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
             n_components (int): the number of mixture components
-            random_state (int): default random_state
         """ 
         super(ConditionalGMM, self).__init__()
         self.input_dim = input_dim
@@ -32,7 +31,6 @@ class ConditionalGMM(nn.Module):
         self.K = prediction_horizon
         
         self.n_components = n_components
-        self.random_state = random_state
         
         self.pi_ = None
         self.mu_ = None
@@ -98,7 +96,7 @@ class ConditionalGMM(nn.Module):
         X = y.reshape((B,ind))
         Y = y_future.reshape((B,outd))
         
-        self.gmm = GaussianMixture(n_components = self.n_components, random_state = self.random_state)
+        self.gmm = GaussianMixture(n_components = self.n_components)
         self.gmm.fit(torch.cat((X,Y), 1).cpu().numpy())
         
         self.pi_ = torch.tensor(self.gmm.weights_).float().to(device)

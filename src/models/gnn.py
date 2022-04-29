@@ -10,8 +10,7 @@ class GaussianNeuralNet(nn.Module):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0,
-                 random_state=None):
+                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -27,7 +26,6 @@ class GaussianNeuralNet(nn.Module):
             rank (int): rank of low-rank covariance matrix
             bands (int): number of off-diagonal bands in banded covariance matrix
             dropout (float): dropout probability
-            random_state (int): seed to manually set RNG
         """ 
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -39,9 +37,6 @@ class GaussianNeuralNet(nn.Module):
         self.rank = rank
         self.bands = bands
         self.dropout = dropout
-        self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(self.random_state)
             
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
@@ -136,8 +131,7 @@ class GaussianLSTM(nn.Module):
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
                  covariance_type='diagonal', rank=2, bands=2,
-                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False,
-                 random_state=None):
+                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -156,7 +150,6 @@ class GaussianLSTM(nn.Module):
             dropout (float): the dropout rate of the lstm
             bidirectional (bool): whether to initialize a bidirectional lstm
             random_start (bool): If true, will initialize the hidden states randomly from a unit Gaussian
-            random_state (int): seed to manually set RNG
         """ 
         super(GaussianLSTM, self).__init__()
         
@@ -175,9 +168,6 @@ class GaussianLSTM(nn.Module):
         self.dropout = dropout
         self.bidirectional = bidirectional
         self.random_start = random_start
-        self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(self.random_state)
             
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
                           num_layers=self.num_layers, batch_first=True,

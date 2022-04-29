@@ -21,7 +21,6 @@ def initialize_model(
     model_name:str, 
     past_dims:int, 
     fut_dims:int, 
-    seed:int=None, 
     mogp_data:Optional[Dict[str, torch.Tensor]]=None,
     **model_kwargs):
     
@@ -32,13 +31,13 @@ def initialize_model(
         hidden_layers = [40, 40, 40]
         ncomps = 3
         model = GaussianMixtureNeuralNet(1, past_dims, hidden_layers, 1, 1, 
-                                       n_components=ncomps, random_state=seed)
+                                       n_components=ncomps)
     
     elif model_name=='IRNN':
         hidden_layers = [20, 20, 20]
         hidden_dim = 40
         model = GaussianMixtureLSTM(1, hidden_dim, hidden_layers, 1, 1, 
-                                     n_components=3, random_state=seed, random_start=False)
+                                     n_components=3, random_start=False)
     
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
@@ -50,7 +49,7 @@ def initialize_model(
         rank = 2
         model = GaussianMixtureNeuralNet(1, past_dims, hidden_layers, 1, fut_dims, 
                                      n_components=ncomps, covariance_type=covtype,
-                                     rank=rank, random_state=seed)
+                                     rank=rank)
     
     elif model_name=='JRNN':
         hidden_layers = [40,40,40]
@@ -60,7 +59,7 @@ def initialize_model(
         rank = 2
         model = GaussianMixtureLSTM(1, hidden_dim, hidden_layers,  1, fut_dims,
                                 n_components=ncomps, covariance_type=covtype, rank=rank, 
-                                random_state=seed, random_start=False)
+                                random_start=False)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"
@@ -68,7 +67,7 @@ def initialize_model(
         index_rank = 8
         likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=fut_dims)
         model = MultiOutputGP(mogp_data['train_x'], mogp_data['train_y'], likelihood, covar_kernel=covar_kernel, 
-                          index_rank=index_rank, random_state=seed)
+                          index_rank=index_rank)
     
     elif model_name=='CGMM':
         if past_dims==8:
@@ -78,7 +77,7 @@ def initialize_model(
         else:
             raise NotImplementedError
         model = ConditionalGMM(1, past_dims, 1, fut_dims, 
-                          n_components=ncomp, random_state=seed)
+                          n_components=ncomp)
     
     elif model_name=='CANF':
         ncomp = 25
@@ -86,7 +85,7 @@ def initialize_model(
         hdim = 32
         model = ConditionalANF(1, past_dims, 1, fut_dims, 
             hidden_dim=hdim, n_flows=nflows,     
-            n_components=ncomp, random_state=seed)
+            n_components=ncomp)
     else:
         raise NotImplementedError
     return model
@@ -95,7 +94,6 @@ def train_model(
     model_name:str, 
     model:torch.nn.Module, 
     dataset, 
-    seed:Optional[int]=None, 
     mogp_data:Optional[Dict[str, torch.Tensor]]=None,
     **train_kwargs):
 
@@ -139,7 +137,7 @@ def train_model(
         ep = 4000
         lr = 0.005
         model.fit(dataset, n_samples=nsamp, 
-            epochs=ep, seed=seed, val_every=100, lr=lr) # train_kwargs
+            epochs=ep, val_every=100, lr=lr) # train_kwargs
     else:
         raise NotImplementedError
     return model
@@ -191,11 +189,14 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
     metrics = {'WAPE':[], 'RWSE':[], 'DScore':[]}
     for seed in tqdm(range(nseeds)):
         
+        # set seed
+        set_seed(seed)
+
         # define model
-        model = initialize_model(model_name, past_dims, fut_dims, seed=seed, mogp_data=mogp_data)
+        model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data)
 
         # train
-        train_model(model_name, model, dataset, seed=seed, mogp_data=mogp_data)
+        train_model(model_name, model, dataset, mogp_data=mogp_data)
         #try:
         #    train_model(model_name, model, dataset)
         #except:

@@ -6,11 +6,8 @@ import torch.nn as nn
 
 class NormalizingFlowModel(nn.Module):
 
-    def __init__(self, prior, flows, random_state=None):
+    def __init__(self, prior, flows):
         super().__init__()
-        self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(self.random_state)
         self.prior = prior
         self.flows = nn.ModuleList(flows)
 

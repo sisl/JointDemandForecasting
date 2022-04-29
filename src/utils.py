@@ -2,9 +2,10 @@
 # utils.py
 #
 
+import numpy as np
 import torch
-import random
 import math
+import random
 from torch.utils.data import Dataset
 from typing import Dict
 
@@ -32,6 +33,12 @@ class SequenceDataset(Dataset):
   def __getitem__(self, idx):
     return {key: self.data[key][idx] for key in self.data_keys}
 
+def set_seed(seed:int):
+    """
+    Set numpy and torch seed manually from int
+    """
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 def bmm(A,b):
     """

@@ -10,8 +10,7 @@ class GaussianMixtureNeuralNet(nn.Module):
     
     """     
     def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 n_components=3, covariance_type='diagonal', rank=2, bands=2, tied=False, dropout=0.0,
-                 random_state=None):
+                 n_components=3, covariance_type='diagonal', rank=2, bands=2, tied=False, dropout=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -29,7 +28,6 @@ class GaussianMixtureNeuralNet(nn.Module):
             bands (int): number of off-diagonal bands in banded covariance matrix
             tied (bool): if True, predict the same covariance for each component in mixture
             dropout (float): dropout probability
-            random_state (int): seed to manually set RNG
         """ 
         super(GaussianMixtureNeuralNet, self).__init__()
         self.input_dim = input_dim
@@ -47,9 +45,6 @@ class GaussianMixtureNeuralNet(nn.Module):
         if self.tied:
             raise("Tied covariances not yet implemented")
         self.dropout = dropout
-        self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(self.random_state)
         
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
@@ -157,8 +152,7 @@ class GaussianMixtureLSTM(nn.Module):
     """ 
     def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
                  n_components=3, covariance_type='diagonal', rank=2, tied=False,
-                 num_layers=1, dropout=0.0, bidirectional=False, random_start=True,
-                 random_state=None):
+                 num_layers=1, dropout=0.0, bidirectional=False, random_start=True):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -178,7 +172,6 @@ class GaussianMixtureLSTM(nn.Module):
             dropout (float): the dropout rate of the lstm
             bidirectional (bool): whether to initialize a bidirectional lstm
             random_start (bool): If true, will initialize the hidden states randomly from a unit Gaussian
-            random_state (int): seed to manually set RNG
         """ 
         super(GaussianMixtureLSTM, self).__init__()
         
@@ -202,9 +195,6 @@ class GaussianMixtureLSTM(nn.Module):
         self.dropout = dropout
         self.bidirectional = bidirectional
         self.random_start = random_start
-        self.random_state = random_state
-        if random_state is not None:
-            torch.manual_seed(self.random_state)
             
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
                           num_layers=self.num_layers, batch_first=True,
