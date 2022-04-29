@@ -46,7 +46,7 @@ def initialize_model(
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"
         covar_kernel = gpytorch.kernels.RQKernel(ard_num_dims=past_dims) * gpytorch.kernels.MaternKernel(ard_num_dims=past_dims)
-        model = MultiOutputGP(mogp_data['train_x'], mogp_data['train_y'], 
+        model = MultiOutputGP(mogp_data['train']['x'], mogp_data['train']['y'], 
             covar_kernel=covar_kernel, **model_kwargs)
     
     elif model_name=='CGMM':
@@ -104,7 +104,7 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            samples = model(mogp_data['test_x']).sample(torch.Size([n_samples]))
+            samples = model(mogp_data['test']['x']).sample(torch.Size([n_samples]))
     
     elif model_name=='CANF':
         dist = model(dataset['test'][:]['x'])
@@ -127,14 +127,13 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
     config = get_config(model_name, loc, past_dims, fut_dims)
 
     mogp_data = {
-        'train_x': dataset['train'][:]['x'].reshape(dataset['train'][:]['x'].size(0),-1).contiguous(),
-        'train_y': dataset['train'][:]['y'].reshape(dataset['train'][:]['y'].size(0),-1).contiguous(),
-        'test_x': dataset['test'][:]['x'].reshape(dataset['test'][:]['x'].size(0),-1).contiguous(),
-        'test_y': dataset['test'][:]['y'].reshape(dataset['test'][:]['y'].size(0),-1).contiguous(),
+        d:{
+            l:dataset[d][:][l].reshape(len(dataset[d][:][l]),-1).contiguous() for l in ['x','y',]
+            } for d in ['train','val','test']
         } if model_name=='MOGP' else None
 
     # loop through and save wapes, rwses, dscores [ignoring nlls, train nlls]
-    metrics = {'WAPE':[], 'RWSE':[], 'DScore':[]}
+    metrics_all = []
     for seed in tqdm(range(config['seed'],config['seed']+nseeds)):
         
         # set seed
@@ -152,21 +151,23 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
         
         # test
         samples = generate_samples(model_name, model, dataset, n_samples=1000, mogp_data=mogp_data)
-        metrics['WAPE'].append(wape(samples,dataset['test'][:]['y'], sampled=True)[0])
-        metrics['RWSE'].append(rwse(samples,dataset['test'][:]['y'], sampled=True)[0])
-        #nlls.append(nll(dist,Y_test)[0])
-        #trnlls.append(nll(dist_tr,Y_train)[0])
+
         min_indices = 4
         obj_fn = lambda x: var(x, 0.8)
-        metrics['DScore'].append(index_allocation(samples, min_indices, obj_fn, dataset['test'][:]['y'], 0.8))
-    
+        metrics = {
+            'WAPE': wape(samples,dataset['test'][:]['y'], sampled=True)[0], 
+            'RWSE': rwse(samples,dataset['test'][:]['y'], sampled=True)[0],
+            #nlls.append(nll(dist,Y_test)[0])
+            #trnlls.append(nll(dist_tr,Y_train)[0])
+            'DScore':index_allocation(samples, min_indices, obj_fn, dataset['test'][:]['y'], 0.8),
+        }
+        metrics_all.append(metrics)
+
     print(f'{model_name} Metrics:')
-    for metric_key in metrics.keys():
-        metrics[metric_key] = torch.tensor(metrics[metric_key])
-        print(f'{metric_key}s: {metrics[metric_key]}')
-        print(f'{metric_key}: {metrics[metric_key].mean()} \pm {metrics[metric_key].std()}')
-
-
+    for metric_key in metrics_all[0].keys():
+        ms = torch.tensor([m[metric_key] for m in metrics_all])
+        print(f'{metric_key}s: {ms}')
+        print(f'{metric_key}: {ms.mean()} \pm {ms.std()}')
 
 if __name__=='__main__':
     import argparse

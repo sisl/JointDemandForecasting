@@ -92,12 +92,12 @@ def train_mogp(model, dataset,
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(model.likelihood, model)
     for i in range(epochs):
         optimizer.zero_grad()
-        output = model(dataset['train_x'])
-        loss = -mll(output, dataset['train_y'])
+        output = model(dataset['train']['x'])
+        loss = -mll(output, dataset['train']['y'])
         loss.backward()
         if (i+1) % log_every==0:
             logger.info(f"Iter: {i+1}/{epochs}\t" +
-                "Train Loss: %.3f" % (loss.item()/dataset['train_x'].size(0)))
+                "Train Loss: %.3f" % (loss.item()/len(dataset['train']['x'])))
         optimizer.step()
 
 def train_nf(model, dataset:Dict[str,SequenceDataset], 
