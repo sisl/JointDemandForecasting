@@ -1,6 +1,7 @@
 from src.utils import SequenceDataset
 from typing import Dict
 import torch
+from torch.utils.data import DataLoader
 import gpytorch
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -29,40 +30,44 @@ def nll(dist, target):
 
 # training functions
 def train(model, dataset, 
-    epochs=20, 
+    epochs:int=20, 
     optimizer = torch.optim.Adam,
-    learning_rate=0.01,
-    log_every=10, 
+    learning_rate:float=0.01,
+    batch_size:int=64,
+    val_every:int=10, 
     ):
     """ 
     Train a regular model. 
 
     Args: 
         model: pytorch model to train.
-        X_batches (list of torch tensor): list of (batch_size, *) tensor input data.
-        Y_batches (list of torch tensor): list of (batch_size, *) tensor data labels.
+        dataset
         num_epochs (int): number of times to iterate through all batches
         optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
+        val_every (int): logging interval
     """                                                        
     optimizer = optimizer(model.parameters(), lr=learning_rate)
     
+    train_loader = DataLoader(dataset['train'], batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(dataset['val'], batch_size=batch_size)
     # Train the model
-    for epoch in range(epochs):
+    for i in range(epochs):
         epoch_loss = 0
-        for x, y in zip(dataset['X_batches'], dataset['Y_batches']):
+        for batch in train_loader:
             optimizer.zero_grad()
             
-            dist = model(x)
-            loss, _ = nll(dist, y)
+            dist = model(batch['x'])
+            loss, _ = nll(dist, batch['y'])
             loss.backward()
             optimizer.step()
-            epoch_loss += loss.item()/len(dataset['X_batches'])
+            epoch_loss += loss.item()*len(batch['x'])
 
-        if (epoch+1) % log_every == 0:
-            logger.info("epoch : %d, loss: %1.4f" %(epoch+1, epoch_loss))
+        epoch_loss /= len(dataset['train'])
+        if (i+1) % val_every == 0:
+            logger.info(f"Iter: {i+1}/{epochs}\t" +
+                "Train Loss: %1.4f" %(epoch_loss))
             
-        
 def train_mogp(model, dataset, 
     epochs=40,
     optimizer = torch.optim.Adam, 
@@ -91,8 +96,8 @@ def train_mogp(model, dataset,
         loss = -mll(output, dataset['train_y'])
         loss.backward()
         if (i+1) % log_every==0:
-            logger.info('Iter %d/%d - Mean Loss: %.3f' % (i + 1, 
-                epochs, loss.item()/dataset['train_x'].size(0)))
+            logger.info(f"Iter: {i+1}/{epochs}\t" +
+                "Train Loss: %.3f" % (loss.item()/dataset['train_x'].size(0)))
         optimizer.step()
 
 def train_nf(model, dataset:Dict[str,SequenceDataset], 
@@ -135,7 +140,7 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         if (i+1) % val_every == 0:
             _, prior_logprob_val, log_det_val = model(x_val)
             logprob_val = prior_logprob_val + log_det_val
-            logger.info(f"Iter: {i+1}\t" +
+            logger.info(f"Iter: {i+1}/{epochs}\t" +
                         f"Logprob: {logprob.mean().data:.2f}\t" +
                         f"Prior: {prior_logprob.mean().data:.2f}\t" +
                         f"LogDet: {log_det.mean().data:.2f}\t" + 

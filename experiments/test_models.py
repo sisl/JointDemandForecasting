@@ -43,7 +43,7 @@ def initialize_model(
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
     
-    elif model_name=='JFNN':
+    elif model_name == 'JFNN':
         hidden_layers = [40, 40, 40]
         ncomps = 2
         covtype = 'low-rank'
@@ -100,30 +100,26 @@ def train_model(
     **train_kwargs):
 
     if model_name=='ARMA':
-        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:])
+        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0]])
     
     elif model_name=='IFNN':
-        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:], batch_size = 64, random_state = seed)
-        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
-        train(model, batches, epochs=150, learning_rate=.005)
+        for key in ['train','val']:
+            dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
+        train(model, dataset, epochs=150, learning_rate=.005, batch_size=64)
     
     elif model_name=='IRNN':
-        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0],:], batch_size = 64, random_state = seed)
-        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
-        train(model, batches, epochs=200, learning_rate=.005)
+        for key in ['train','val']:
+            dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
+        train(model, dataset, epochs=200, learning_rate=.005, batch_size=64)
     
     elif model_name=='CG':
         model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
     
     elif model_name=='JFNN':
-        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'], batch_size = 64, random_state = seed)
-        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
-        train(model, batches, epochs=300, learning_rate=.002)
-    
+        train(model, dataset, epochs=300, learning_rate=.002, batch_size=64)
+
     elif model_name=='JRNN':
-        X_batches, Y_batches = batch(dataset['train'][:]['x'], dataset['train'][:]['y'], batch_size = 64, random_state = seed)
-        batches = {'X_batches':X_batches, 'Y_batches':Y_batches}
-        train(model, batches, epochs=200, learning_rate=.005)
+        train(model, dataset, epochs=200, learning_rate=.005, batch_size=64)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
@@ -140,7 +136,7 @@ def train_model(
     
     elif model_name=='CANF':
         nsamp = 100000
-        ep = 500 # 4000
+        ep = 4000
         lr = 0.005
         model.fit(dataset, n_samples=nsamp, 
             epochs=ep, seed=seed, val_every=100, lr=lr) # train_kwargs
