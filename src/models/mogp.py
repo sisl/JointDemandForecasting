@@ -5,9 +5,10 @@ import gpytorch
 import numpy as np
 
 class MultiOutputGP(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood,
-                 covar_kernel=gpytorch.kernels.RBFKernel(), 
-                 index_rank=2):
+    def __init__(self, train_x, train_y, 
+        likelihood=None,
+        covar_kernel=gpytorch.kernels.RBFKernel(), 
+        index_rank=2):
         
         B, num_tasks = train_y.shape
         B2, past_dims = train_x.shape
@@ -15,6 +16,8 @@ class MultiOutputGP(gpytorch.models.ExactGP):
         self.past_dims = past_dims
         self.num_tasks = num_tasks
         self.index_rank = index_rank
+        if likelihood is None:
+            likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=num_tasks)
         
         super(MultiOutputGP, self).__init__(train_x, train_y, likelihood)
         self.mean_module = gpytorch.means.MultitaskMean(

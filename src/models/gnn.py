@@ -9,8 +9,13 @@ class GaussianNeuralNet(nn.Module):
     Class for probabilistic feedforward neural network using single MvGaussian. 
     
     """     
-    def __init__(self, input_dim, input_horizon, hidden_layer_dims, output_dim, prediction_horizon, 
-                 covariance_type='diagonal', rank=2, bands=2, dropout=0.0):
+    def __init__(self, input_dim, input_horizon, output_dim, prediction_horizon, 
+        hidden_layers=3, 
+        hidden_dims=40,
+        covariance_type='diagonal', 
+        rank=2, 
+        bands=2, 
+        dropout=0.0):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -19,7 +24,8 @@ class GaussianNeuralNet(nn.Module):
 
             input_dim (int): number of input dimensions at each step in the series 
             input_horizon (int): the input horizon T
-            hidden_layer_dims (list of ints): the hidden layer sizes in the neural network
+            hidden_layers (int): number of hidden layers in the neural network
+            hidden_dims (int): number of hidden dims in each layer
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
             covariance_type (string): 'diagonal', 'full', 'low-rank', or 'banded'
@@ -30,7 +36,7 @@ class GaussianNeuralNet(nn.Module):
         super(GaussianNeuralNet, self).__init__()
         self.input_dim = input_dim
         self.T = input_horizon
-        self.hidden_layer_dims = hidden_layer_dims
+        self.hidden_layer_dims = [hidden_dims for _ in range(hidden_layers)]
         self.output_dim = output_dim
         self.K = prediction_horizon
         self.covariance_type = covariance_type
@@ -129,9 +135,17 @@ class GaussianLSTM(nn.Module):
     Class for sequence-to-sequence probabilistic LSTM using single MvGaussian. 
     
     """ 
-    def __init__(self, input_dim, hidden_dim, fc_hidden_layer_dims, output_dim, prediction_horizon,
-                 covariance_type='diagonal', rank=2, bands=2,
-                 num_layers=1, dropout=0.0, bidirectional=False, random_start=False):
+    def __init__(self, input_dim, output_dim, prediction_horizon,
+        hidden_dim=20,
+        fc_hidden_layers=2,
+        fc_hidden_dims=20,
+        covariance_type='diagonal', 
+        rank=2, 
+        bands=2,
+        num_layers=1, 
+        dropout=0.0,
+        bidirectional=False, 
+        random_start=False):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -139,10 +153,11 @@ class GaussianLSTM(nn.Module):
         Args: 
 
             input_dim (int): number of input dimensions at each step in the series 
-            hidden_dim (int): number of hidden/cell dimensions
-            fc_hidden_layer_dims (list of ints): the hidden layer sizes in the neural network mapping from hidden state to output
             output_dim (int): the dimension of the outputs at each point in the sequence
             prediction_horizon (int): the prediction horizon K
+            hidden_dim (int): number of hidden/cell dimensions
+            fc_hidden_layers (int): number of hidden layers in the decoder network
+            fc_hidden_dims (int): number of hidden dims in each layer
             covariance_type (string): 'diagonal', 'full', 'low-rank', or 'banded'
             rank (int): rank of low-rank covariance matrix
             bands (int): number of off-diagonal bands in banded covariance matrix
@@ -156,7 +171,7 @@ class GaussianLSTM(nn.Module):
         # dimensional parameters
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.fc_hidden_layer_dims = fc_hidden_layer_dims
+        self.fc_hidden_layer_dims = [fc_hidden_dims for _ in range(fc_hidden_layers)]
         self.output_dim = output_dim
         self.K = prediction_horizon
         self.covariance_type = covariance_type

@@ -31,7 +31,6 @@ class ConditionalANF(nn.Module):
             input_horizon (int): the input horizon T
             output_dim (int): the output dimension
             prediction_horizon (int): the prediction horizon K
-
             n_components (int): the number of mixture components for CGMM
         """ 
         super(ConditionalANF, self).__init__()

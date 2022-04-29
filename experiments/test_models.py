@@ -28,46 +28,50 @@ def initialize_model(
         model = BayesianLinearRegression(1, past_dims, 1, 1)
     
     elif model_name=='IFNN':
-        hidden_layers = [40, 40, 40]
+        hl = 3
+        hdim = 40
         ncomps = 3
-        model = GaussianMixtureNeuralNet(1, past_dims, hidden_layers, 1, 1, 
-                                       n_components=ncomps)
+        model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, 
+            hidden_layers=hl, hidden_dims=hdim, n_components=ncomps)
     
     elif model_name=='IRNN':
-        hidden_layers = [20, 20, 20]
+        fc_hl = 3
+        fc_hdim = 20
         hidden_dim = 40
-        model = GaussianMixtureLSTM(1, hidden_dim, hidden_layers, 1, 1, 
-                                     n_components=3, random_start=False)
+        ncomps = 3
+        model = GaussianMixtureLSTM(1, 1, 1, 
+            hidden_dim=hidden_dim, fc_hidden_layers=fc_hl, fc_hidden_dims=fc_hdim, n_components=ncomps, random_start=False)
     
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
     
     elif model_name == 'JFNN':
-        hidden_layers = [40, 40, 40]
+        hl = 3
+        hdim = 40
         ncomps = 2
         covtype = 'low-rank'
         rank = 2
-        model = GaussianMixtureNeuralNet(1, past_dims, hidden_layers, 1, fut_dims, 
-                                     n_components=ncomps, covariance_type=covtype,
-                                     rank=rank)
+        model = GaussianMixtureNeuralNet(1, past_dims, 1, fut_dims, 
+            hidden_layers=hl, hidden_dims=hdim, n_components=ncomps, covariance_type=covtype, rank=rank)
     
     elif model_name=='JRNN':
         hidden_layers = [40,40,40]
+        fc_hl = 3
+        fc_hdim = 40
         hidden_dim = 40
         ncomps = 2
         covtype = 'low-rank'
         rank = 2
-        model = GaussianMixtureLSTM(1, hidden_dim, hidden_layers,  1, fut_dims,
-                                n_components=ncomps, covariance_type=covtype, rank=rank, 
-                                random_start=False)
+        model = GaussianMixtureLSTM(1, 1, fut_dims,
+            hidden_dim=hidden_dim, fc_hidden_layers=fc_hl, fc_hidden_dims=fc_hdim,
+            n_components=ncomps, covariance_type=covtype, rank=rank, random_start=False)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"
         covar_kernel = gpytorch.kernels.RQKernel(ard_num_dims=past_dims) * gpytorch.kernels.MaternKernel(ard_num_dims=past_dims)
         index_rank = 8
-        likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=fut_dims)
-        model = MultiOutputGP(mogp_data['train_x'], mogp_data['train_y'], likelihood, covar_kernel=covar_kernel, 
-                          index_rank=index_rank)
+        model = MultiOutputGP(mogp_data['train_x'], mogp_data['train_y'], 
+            covar_kernel=covar_kernel, index_rank=index_rank)
     
     elif model_name=='CGMM':
         if past_dims==8:
@@ -77,7 +81,7 @@ def initialize_model(
         else:
             raise NotImplementedError
         model = ConditionalGMM(1, past_dims, 1, fut_dims, 
-                          n_components=ncomp)
+            n_components=ncomp)
     
     elif model_name=='CANF':
         ncomp = 25
