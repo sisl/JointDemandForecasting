@@ -7,6 +7,7 @@ from src.utils import *
 from src.train_utils import train, train_mogp
 
 from experiments.charging_utils import *
+from experiments.get_config import get_config
 from src.models import *
 from typing import Optional, Dict
 MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF']
@@ -28,68 +29,32 @@ def initialize_model(
         model = BayesianLinearRegression(1, past_dims, 1, 1)
     
     elif model_name=='IFNN':
-        hl = 3
-        hdim = 40
-        ncomps = 3
-        model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, 
-            hidden_layers=hl, hidden_dims=hdim, n_components=ncomps)
+        model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, **model_kwargs)
     
     elif model_name=='IRNN':
-        fc_hl = 3
-        fc_hdim = 20
-        hidden_dim = 40
-        ncomps = 3
-        model = GaussianMixtureLSTM(1, 1, 1, 
-            hidden_dim=hidden_dim, fc_hidden_layers=fc_hl, fc_hidden_dims=fc_hdim, n_components=ncomps, random_start=False)
+        model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)          
     
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
     
     elif model_name == 'JFNN':
-        hl = 3
-        hdim = 40
-        ncomps = 2
-        covtype = 'low-rank'
-        rank = 2
-        model = GaussianMixtureNeuralNet(1, past_dims, 1, fut_dims, 
-            hidden_layers=hl, hidden_dims=hdim, n_components=ncomps, covariance_type=covtype, rank=rank)
+        model = GaussianMixtureNeuralNet(1, past_dims, 1, fut_dims, **model_kwargs)
     
     elif model_name=='JRNN':
-        hidden_layers = [40,40,40]
-        fc_hl = 3
-        fc_hdim = 40
-        hidden_dim = 40
-        ncomps = 2
-        covtype = 'low-rank'
-        rank = 2
-        model = GaussianMixtureLSTM(1, 1, fut_dims,
-            hidden_dim=hidden_dim, fc_hidden_layers=fc_hl, fc_hidden_dims=fc_hdim,
-            n_components=ncomps, covariance_type=covtype, rank=rank, random_start=False)
+        model = GaussianMixtureLSTM(1, 1, fut_dims, **model_kwargs)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"
         covar_kernel = gpytorch.kernels.RQKernel(ard_num_dims=past_dims) * gpytorch.kernels.MaternKernel(ard_num_dims=past_dims)
-        index_rank = 8
         model = MultiOutputGP(mogp_data['train_x'], mogp_data['train_y'], 
-            covar_kernel=covar_kernel, index_rank=index_rank)
+            covar_kernel=covar_kernel, **model_kwargs)
     
     elif model_name=='CGMM':
-        if past_dims==8:
-            ncomp = 4
-        elif past_dims==24:
-            ncomp = 5
-        else:
-            raise NotImplementedError
-        model = ConditionalGMM(1, past_dims, 1, fut_dims, 
-            n_components=ncomp)
+        model = ConditionalGMM(1, past_dims, 1, fut_dims, **model_kwargs)      
     
     elif model_name=='CANF':
-        ncomp = 25
-        nflows = 10
-        hdim = 32
-        model = ConditionalANF(1, past_dims, 1, fut_dims, 
-            hidden_dim=hdim, n_flows=nflows,     
-            n_components=ncomp)
+        model = ConditionalANF(1, past_dims, 1, fut_dims, **model_kwargs)
+
     else:
         raise NotImplementedError
     return model
@@ -100,48 +65,26 @@ def train_model(
     dataset, 
     mogp_data:Optional[Dict[str, torch.Tensor]]=None,
     **train_kwargs):
+    
+    # update training/val data for single step in iterative models
+    if model_name in ['ARMA', 'IFNN', 'IRNN']:
+        for key in ['train','val']:
+            dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
 
-    if model_name=='ARMA':
-        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,[0]])
-    
-    elif model_name=='IFNN':
-        for key in ['train','val']:
-            dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
-        train(model, dataset, epochs=150, learning_rate=.005, batch_size=64)
-    
-    elif model_name=='IRNN':
-        for key in ['train','val']:
-            dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
-        train(model, dataset, epochs=200, learning_rate=.005, batch_size=64)
-    
-    elif model_name=='CG':
+    # train models
+    if model_name in ['ARMA', 'CG', 'CGMM']:
         model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
     
-    elif model_name=='JFNN':
-        train(model, dataset, epochs=300, learning_rate=.002, batch_size=64)
-
-    elif model_name=='JRNN':
-        train(model, dataset, epochs=200, learning_rate=.005, batch_size=64)
+    elif model_name in ['IFNN','IRNN','JFNN','JRNN']:
+        train(model, dataset, **train_kwargs)
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
-        if model.past_dims==8:
-            ep = 55
-        elif model.past_dims==24:
-            ep = 75
-        else:
-            raise NotImplementedError
-        train_mogp(model, mogp_data, epochs=ep)
-    
-    elif model_name=='CGMM':
-        model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
+        train_mogp(model, mogp_data, **train_kwargs)
     
     elif model_name=='CANF':
-        nsamp = 100000
-        ep = 4000
-        lr = 0.005
-        model.fit(dataset, n_samples=nsamp, 
-            epochs=ep, val_every=100, lr=lr) # train_kwargs
+        model.fit(dataset, **train_kwargs)
+    
     else:
         raise NotImplementedError
     return model
@@ -179,8 +122,9 @@ def tune():
 
 def test(model_name, loc, past_dims, fut_dims, nseeds):
 
-    # get dataset
+    # get dataset and config
     dataset = load_data(loc, past_dims, fut_dims)
+    config = get_config(model_name, loc, past_dims, fut_dims)
 
     mogp_data = {
         'train_x': dataset['train'][:]['x'].reshape(dataset['train'][:]['x'].size(0),-1).contiguous(),
@@ -191,16 +135,16 @@ def test(model_name, loc, past_dims, fut_dims, nseeds):
 
     # loop through and save wapes, rwses, dscores [ignoring nlls, train nlls]
     metrics = {'WAPE':[], 'RWSE':[], 'DScore':[]}
-    for seed in tqdm(range(nseeds)):
+    for seed in tqdm(range(config['seed'],config['seed']+nseeds)):
         
         # set seed
         set_seed(seed)
 
         # define model
-        model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data)
+        model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data, **config['model'])
 
         # train
-        train_model(model_name, model, dataset, mogp_data=mogp_data)
+        train_model(model_name, model, dataset, mogp_data=mogp_data, **config['train'])
         #try:
         #    train_model(model_name, model, dataset)
         #except:
