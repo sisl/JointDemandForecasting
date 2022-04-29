@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 import gpytorch
 import logging
+from ray import tune
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def train(model, dataset,
     learning_rate:float=0.01,
     batch_size:int=64,
     val_every:int=10, 
-    ):
+    ray=False):
     """ 
     Train a regular model. 
 
@@ -77,12 +78,15 @@ def train(model, dataset,
             logger.info(f"Iter: {i+1}/{epochs}\t" +
                 "Train Loss: %1.4f\t" %(epoch_loss) +
                 "Val Loss: %1.4f\t" %(val_loss))
+            if ray:
+                tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss)
             
 def train_mogp(model, dataset, 
     epochs=40,
     optimizer = torch.optim.Adam, 
     lr=0.05, 
-    val_every=5):
+    val_every=5, 
+    ray=False):
     """ 
     Train a Multi-Output Gaussian Process model. 
 
@@ -115,15 +119,20 @@ def train_mogp(model, dataset,
                 val_loss = -mll(model(dataset['val']['x']), 
                     dataset['val']['y'])
             model.train(), model.likelihood.train()
+            epoch_loss = loss.item()/len(dataset['train']['x'])
+            val_loss = val_loss.item()/len(dataset['val']['x'])
             logger.info(f"Iter: {i+1}/{epochs}\t" +
-                "Train Loss: %.3f\t" % (loss.item()/len(dataset['train']['x'])) +
-                "Val Loss: %.3f" % (val_loss.item()/len(dataset['val']['x'])))       
+                "Train Loss: %.3f\t" % (epoch_loss) +
+                "Val Loss: %.3f" % (val_loss))    
+            if ray:
+                tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss)   
 
 def train_nf(model, dataset:Dict[str,SequenceDataset], 
     epochs=100, 
     val_every=100, 
     lr=0.005, 
-    optimizer=torch.optim.Adam):
+    optimizer=torch.optim.Adam, 
+    ray=False):
     """ 
     Train a normalizing flow model model. 
 
@@ -160,9 +169,14 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         if (i+1) % val_every == 0:
             _, prior_logprob_val, log_det_val = model(x_val)
             logprob_val = prior_logprob_val + log_det_val
+            epoch_loss = -logprob.mean().data
+            val_loss = -logprob_val.mean().data
             logger.info(f"Iter: {i+1}/{epochs}\t" +
-                        f"Train Loss (NLL): {-logprob.mean().data:.2f}\t" +
+                        f"Train Loss (NLL): {epoch_loss:.2f}\t" +
                         f"Prior: {prior_logprob.mean().data:.2f}\t" +
                         f"LogDet: {log_det.mean().data:.2f}\t" + 
-                        f"Val Loss: {-logprob_val.mean().data:.2f}")
+                        f"Val Loss: {val_loss:.2f}")
+            if ray:
+                tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss,
+                    prior=prior_logprob.mean().data, logdet=log_det.mean().data) 
     model.eval()

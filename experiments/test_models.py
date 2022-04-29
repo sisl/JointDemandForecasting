@@ -2,14 +2,18 @@ from tqdm import tqdm
 import torch
 import torch.nn as nn
 import gpytorch
+from ray import tune
+
 import src
 from src.utils import *
 from src.train_utils import train, train_mogp
 
 from experiments.charging_utils import *
-from experiments.get_config import get_config
+from experiments.get_config import get_config, get_config_ray
 from src.models import *
 from typing import Optional, Dict
+from functools import partial
+
 MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF']
 #        kernels = {'rbf': gpytorch.kernels.RBFKernel(),
 #           'ind_rbf': gpytorch.kernels.RBFKernel(ard_num_dims=past_dims),
@@ -117,11 +121,20 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
         raise NotImplementedError
     return samples
 
-def tune():
-    pass
+def calc_metrics(samples, test_y):
+        min_indices = 4
+        obj_fn = lambda x: var(x, 0.8)
+        metrics = {
+            'WAPE': wape(samples,test_y, sampled=True)[0], 
+            'RWSE': rwse(samples,test_y, sampled=True)[0],
+            #nlls.append(nll(dist,Y_test)[0])
+            #trnlls.append(nll(dist_tr,Y_train)[0])
+            'DScore':index_allocation(samples, min_indices, obj_fn, test_y, 0.8),
+        }
+        return metrics
 
-def test(config, model_name, loc, past_dims, fut_dims, nseeds):
-
+def test(config, model_name=None, loc=None, past_dims=None, fut_dims=None, ray=False):
+    assert None not in [model_name, loc, past_dims, fut_dims]
     # get dataset and config
     dataset = load_data(loc, past_dims, fut_dims)
 
@@ -131,42 +144,39 @@ def test(config, model_name, loc, past_dims, fut_dims, nseeds):
             } for d in ['train','val','test']
         } if model_name=='MOGP' else None
 
-    # loop through and save wapes, rwses, dscores [ignoring nlls, train nlls]
-    metrics_all = []
-    for seed in tqdm(range(config['seed'],config['seed']+nseeds)):
+    # train model and report metrics
+    seed = config['seed']
         
-        # set seed
-        set_seed(seed)
+    # set seed
+    set_seed(seed)
 
-        # define model
-        model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data, **config['model'])
+    # define model
+    model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data, **config['model'])
 
-        # train
-        train_model(model_name, model, dataset, mogp_data=mogp_data, **config['train'])
-        #try:
-        #    train_model(model_name, model, dataset)
-        #except:
-        #    continue
-        
-        # test
-        samples = generate_samples(model_name, model, dataset, n_samples=1000, mogp_data=mogp_data)
+    # train
+    train_model(model_name, model, dataset, mogp_data=mogp_data, ray=ray, **config['train'])
+    #try:
+    #    train_model(model_name, model, dataset)
+    #except:
+    #    continue
+    
+    # test
+    samples = generate_samples(model_name, model, dataset, n_samples=1000, mogp_data=mogp_data)
 
-        min_indices = 4
-        obj_fn = lambda x: var(x, 0.8)
-        metrics = {
-            'WAPE': wape(samples,dataset['test'][:]['y'], sampled=True)[0], 
-            'RWSE': rwse(samples,dataset['test'][:]['y'], sampled=True)[0],
-            #nlls.append(nll(dist,Y_test)[0])
-            #trnlls.append(nll(dist_tr,Y_train)[0])
-            'DScore':index_allocation(samples, min_indices, obj_fn, dataset['test'][:]['y'], 0.8),
-        }
-        metrics_all.append(metrics)
+    # get and print metrics
+    metrics = calc_metrics(samples, dataset['test'][:]['y'])
+    if ray:
+        tune.report(**metrics)
+    else:
+        print(f'{model_name} Metrics:')
+        for key in metrics.keys():
+            print(f'{key}: {metrics[key]}')
 
-    print(f'{model_name} Metrics:')
-    for metric_key in metrics_all[0].keys():
-        ms = torch.tensor([m[metric_key] for m in metrics_all])
-        print(f'{metric_key}s: {ms}')
-        print(f'{metric_key}: {ms.mean()} \pm {ms.std()}')
+# print(f'{model_name} Metrics:')
+#for metric_key in metrics_all[0].keys():
+#    ms = torch.tensor([m[metric_key] for m in metrics_all])
+#    print(f'{metric_key}s: {ms}')
+#    print(f'{metric_key}: {ms.mean()} \pm {ms.std()}')
 
 if __name__=='__main__':
     import argparse
@@ -187,10 +197,22 @@ if __name__=='__main__':
     parser.add_argument('-input', default=8, type=int,
         help='input time-series length')
     parser.add_argument('-output', default=12, type=int,
-        help='output time-series length')                  
+        help='output time-series length')   
+    parser.add_argument("--ray", help="run ray tune",
+        action="store_true", default=False)               
     args = parser.parse_args()
 
-    config = get_config(args.model, args.loc, args.input, args.output)
-    test(config, args.model, args.loc, args.input, args.output, args.ntestseeds)
+    if args.ray:
+        config = get_config_ray(args.model, args.loc, args.input, args.output, args.ntestseeds)
+        tune.run(partial(test, 
+                model_name=args.model, 
+                loc=args.loc, 
+                past_dims=args.input, 
+                fut_dims=args.output,  
+                ray=args.ray), 
+            config=config)
+    else:
+        config = get_config(args.model, args.loc, args.input, args.output)
+        test(config, model_name=args.model, loc=args.loc, past_dims=args.input, fut_dims=args.output,  ray=args.ray)
 
 

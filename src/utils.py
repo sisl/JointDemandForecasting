@@ -8,6 +8,9 @@ import math
 import random
 from torch.utils.data import Dataset
 from typing import Dict
+import os
+import src
+BASE_PATH = os.path.normpath(os.path.join(os.path.dirname(src.__file__), '..'))
 
 class SequenceDataset(Dataset):
   """
@@ -140,9 +143,9 @@ def load_data(loc, past_dims, fut_dims, path_x=None, path_y=None)->Dict[str,Sequ
     """
     assert past_dims+fut_dims <= 36, "too many total dimensions in sequence lengths" 
     if path_x is None:
-        path_x = "datasets/processed/openEI/X_openei_011_subset_multitask.pt"
+        path_x = os.path.join(BASE_PATH,"datasets/processed/openEI/X_openei_011_subset_multitask.pt")
     if path_y is None:
-        path_y = "datasets/processed/openEI/Y_openei_011_subset_multitask.pt"
+        path_y = os.path.join(BASE_PATH,"datasets/processed/openEI/Y_openei_011_subset_multitask.pt")
         
     # Data setup:
     X_orig = torch.load(path_x)

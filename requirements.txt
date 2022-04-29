@@ -10,3 +10,4 @@ pandas==1.1.0
 requests==2.24.0
 gpytorch==1.1.1
 matplotlib2tikz==0.7.5
+ray-tune
