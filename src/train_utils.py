@@ -51,7 +51,8 @@ def train(model, dataset,
     
     train_loader = DataLoader(dataset['train'], batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset['val'], batch_size=batch_size)
-    # Train the model
+    
+    # train the model
     for i in range(epochs):
         epoch_loss = 0
         for batch in train_loader:
@@ -62,17 +63,26 @@ def train(model, dataset,
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()*len(batch['x'])
-
         epoch_loss /= len(dataset['train'])
+
+        # validate and log scores
         if (i+1) % val_every == 0:
+            with torch.no_grad():
+                val_loss = 0
+                for batch in val_loader:
+                    vloss,_ = nll(model(batch['x']), batch['y'])
+                    val_loss += vloss.item()*len(batch['x'])
+                val_loss /= len(dataset['val'])
+
             logger.info(f"Iter: {i+1}/{epochs}\t" +
-                "Train Loss: %1.4f" %(epoch_loss))
+                "Train Loss: %1.4f\t" %(epoch_loss) +
+                "Val Loss: %1.4f\t" %(val_loss))
             
 def train_mogp(model, dataset, 
     epochs=40,
     optimizer = torch.optim.Adam, 
     lr=0.05, 
-    log_every=5):
+    val_every=5):
     """ 
     Train a Multi-Output Gaussian Process model. 
 
@@ -85,20 +95,29 @@ def train_mogp(model, dataset,
         learning_rate (float): learning rate for Adam optimizer
         verbose (bool): if true, print epoch losses
     """
-    model.train()
-    model.likelihood.train()
+    model.train(), model.likelihood.train()
     optimizer = optimizer([  
         {'params': model.parameters()}], lr=lr)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(model.likelihood, model)
+    
+    # train the model
     for i in range(epochs):
         optimizer.zero_grad()
         output = model(dataset['train']['x'])
         loss = -mll(output, dataset['train']['y'])
         loss.backward()
-        if (i+1) % log_every==0:
-            logger.info(f"Iter: {i+1}/{epochs}\t" +
-                "Train Loss: %.3f" % (loss.item()/len(dataset['train']['x'])))
         optimizer.step()
+
+        # validate and log scores
+        if (i+1) % val_every==0:
+            model.eval(), model.likelihood.eval()
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                val_loss = -mll(model(dataset['val']['x']), 
+                    dataset['val']['y'])
+            model.train(), model.likelihood.train()
+            logger.info(f"Iter: {i+1}/{epochs}\t" +
+                "Train Loss: %.3f\t" % (loss.item()/len(dataset['train']['x'])) +
+                "Val Loss: %.3f" % (val_loss.item()/len(dataset['val']['x'])))       
 
 def train_nf(model, dataset:Dict[str,SequenceDataset], 
     epochs=100, 
@@ -127,6 +146,8 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
     x_val = combined_val[torch.randperm(B_val)]
 
     optimizer = optimizer(model.parameters(), lr=lr)
+    
+    # train the model
     for i in range(epochs):
         optimizer.zero_grad()
         z, prior_logprob, log_det = model(x)
@@ -134,12 +155,14 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         loss = -torch.mean(prior_logprob + log_det)
         loss.backward()
         optimizer.step()
+
+        # validate and log scores
         if (i+1) % val_every == 0:
             _, prior_logprob_val, log_det_val = model(x_val)
             logprob_val = prior_logprob_val + log_det_val
             logger.info(f"Iter: {i+1}/{epochs}\t" +
-                        f"Logprob: {logprob.mean().data:.2f}\t" +
+                        f"Train Loss (NLL): {-logprob.mean().data:.2f}\t" +
                         f"Prior: {prior_logprob.mean().data:.2f}\t" +
                         f"LogDet: {log_det.mean().data:.2f}\t" + 
-                        f"Logprob_val: {logprob_val.mean().data:.2f}")
+                        f"Val Loss: {-logprob_val.mean().data:.2f}")
     model.eval()

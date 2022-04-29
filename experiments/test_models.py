@@ -120,11 +120,10 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
 def tune():
     pass
 
-def test(model_name, loc, past_dims, fut_dims, nseeds):
+def test(config, model_name, loc, past_dims, fut_dims, nseeds):
 
     # get dataset and config
     dataset = load_data(loc, past_dims, fut_dims)
-    config = get_config(model_name, loc, past_dims, fut_dims)
 
     mogp_data = {
         d:{
@@ -190,6 +189,8 @@ if __name__=='__main__':
     parser.add_argument('-output', default=12, type=int,
         help='output time-series length')                  
     args = parser.parse_args()
-    test(args.model, args.loc, args.input, args.output, args.ntestseeds)
+
+    config = get_config(args.model, args.loc, args.input, args.output)
+    test(config, args.model, args.loc, args.input, args.output, args.ntestseeds)
 
 
