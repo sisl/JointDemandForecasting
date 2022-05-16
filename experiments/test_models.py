@@ -33,19 +33,35 @@ def initialize_model(
         model = BayesianLinearRegression(1, past_dims, 1, 1)
     
     elif model_name=='IFNN':
-        model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, **model_kwargs)
+        if model_kwargs['n_components'] == 1:
+            del model_kwargs['n_components']
+            model = GaussianNeuralNet(1, past_dims, 1, 1, **model_kwargs)
+        else:
+            model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, **model_kwargs)
     
     elif model_name=='IRNN':
-        model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)          
+        if model_kwargs['n_components'] == 1:
+            del model_kwargs['n_components']
+            model = GaussianLSTM(1, 1, 1, **model_kwargs)
+        else:
+            model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)          
     
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
     
     elif model_name == 'JFNN':
-        model = GaussianMixtureNeuralNet(1, past_dims, 1, fut_dims, **model_kwargs)
+        if model_kwargs['n_components'] == 1:
+            del model_kwargs['n_components']
+            model = GaussianNeuralNet(1, past_dims, 1, fut_dims, **model_kwargs)
+        else:
+            model = GaussianMixtureNeuralNet(1, past_dims, 1, fut_dims, **model_kwargs)
     
     elif model_name=='JRNN':
-        model = GaussianMixtureLSTM(1, 1, fut_dims, **model_kwargs)
+        if model_kwargs['n_components'] == 1:
+            del model_kwargs['n_components']
+            model = GaussianLSTM(1, 1, fut_dims, **model_kwargs)
+        else:
+            model = GaussianMixtureLSTM(1, 1, fut_dims, **model_kwargs)    
     
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"
@@ -94,7 +110,7 @@ def train_model(
     return model
 
 def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000):
-    fut_dims = dataset['train'][:]['y'].shape[1]
+    fut_dims = dataset['test'][:]['y'].shape[1]
     model.eval()
     if model_name in ['ARMA','IFNN']:
         samples = sample_forward(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
@@ -125,11 +141,11 @@ def calc_metrics(samples, test_y):
         min_indices = 4
         obj_fn = lambda x: var(x, 0.8)
         metrics = {
-            'WAPE': wape(samples,test_y, sampled=True)[0], 
-            'RWSE': rwse(samples,test_y, sampled=True)[0],
+            'WAPE': wape(samples,test_y, sampled=True)[0].item(), 
+            'RWSE': rwse(samples,test_y, sampled=True)[0].item(),
             #nlls.append(nll(dist,Y_test)[0])
             #trnlls.append(nll(dist_tr,Y_train)[0])
-            'DScore':index_allocation(samples, min_indices, obj_fn, test_y, 0.8),
+            'DScore':index_allocation(samples, min_indices, obj_fn, test_y, 0.8).item(),
         }
         return metrics
 
@@ -199,7 +215,9 @@ if __name__=='__main__':
     parser.add_argument('-output', default=12, type=int,
         help='output time-series length')   
     parser.add_argument("--ray", help="run ray tune",
-        action="store_true", default=False)               
+        action="store_true", default=False)
+    parser.add_argument('-cpus_per_trial', default=1, type=int,
+        help='number of cpus per trial')                
     args = parser.parse_args()
 
     if args.ray:
@@ -210,7 +228,7 @@ if __name__=='__main__':
                 past_dims=args.input, 
                 fut_dims=args.output,  
                 ray=args.ray), 
-            config=config)
+            config=config, resources_per_trial={"cpu":args.cpus_per_trial})
     else:
         config = get_config(args.model, args.loc, args.input, args.output)
         test(config, model_name=args.model, loc=args.loc, past_dims=args.input, fut_dims=args.output,  ray=args.ray)

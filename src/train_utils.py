@@ -169,14 +169,14 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         if (i+1) % val_every == 0:
             _, prior_logprob_val, log_det_val = model(x_val)
             logprob_val = prior_logprob_val + log_det_val
-            epoch_loss = -logprob.mean().data
-            val_loss = -logprob_val.mean().data
+            epoch_loss = -logprob.mean().item()
+            val_loss = -logprob_val.mean().item()
             logger.info(f"Iter: {i+1}/{epochs}\t" +
                         f"Train Loss (NLL): {epoch_loss:.2f}\t" +
-                        f"Prior: {prior_logprob.mean().data:.2f}\t" +
-                        f"LogDet: {log_det.mean().data:.2f}\t" + 
+                        f"Prior: {prior_logprob.mean().item():.2f}\t" +
+                        f"LogDet: {log_det.mean().item():.2f}\t" + 
                         f"Val Loss: {val_loss:.2f}")
             if ray:
                 tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss,
-                    prior=prior_logprob.mean().data, logdet=log_det.mean().data) 
+                    prior=prior_logprob.mean().item(), logdet=log_det.mean().item()) 
     model.eval()

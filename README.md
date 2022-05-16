@@ -21,16 +21,12 @@ A framework for multi-step probabilistic time-series/demand forecasting models. 
 - `experiments` contains any experiments conducted in the submitted manuscript.
 
 ## Environment
-A conda environment for exact experiment reproduction can be set up and uses with:
+The requirements can be installed with `pip` using:
 ```
-conda create -y --name jdf python==3.7
-conda install -y --name jdf --file requirements.txt
-conda activate jdf
-...
-conda deactivate
+pip install -r requirements.txt
 ```
 
-To enable CUDA capabilities, rerun:
+If using conda, enable CUDA capabilities by running the following in the environment:
 ```
 conda install --name jdf pytorch cudatoolkit=10.2 -c pytorch
 ```
