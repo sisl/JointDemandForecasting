@@ -23,6 +23,10 @@ def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
             learning_rate=tune.grid_search([.005]),
             batch_size=tune.grid_search([64])))
     
+    elif model_name=='EncDec':
+        config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=1, random_start=False))
+        config['train'].update(dict(epochs=200, learning_rate=.005, batch_size=64, m2m=True))
+    
     elif model_name=='CG':
         pass
     
@@ -82,6 +86,10 @@ def get_config(model_name:str, loc, past_dims, fut_dims):
         config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=1, random_start=False))
         config['train'].update(dict(epochs=200, learning_rate=.005, batch_size=64))
     
+    elif model_name=='EncDec':
+        config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=2, random_start=False)) #ncomps =1 
+        config['train'].update(dict(epochs=100, learning_rate=.005, batch_size=64, m2m=True))
+
     elif model_name=='CG':
         pass
     

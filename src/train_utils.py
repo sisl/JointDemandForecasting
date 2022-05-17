@@ -35,8 +35,9 @@ def train(model, dataset,
     optimizer = torch.optim.Adam,
     learning_rate:float=0.01,
     batch_size:int=64,
-    val_every:int=10, 
-    ray=False):
+    val_every:int=10,
+    m2m:bool=False, 
+    ray:bool=False):
     """ 
     Train a regular model. 
 
@@ -47,6 +48,8 @@ def train(model, dataset,
         optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
         val_every (int): logging interval
+        m2m (bool): whether to run forward passes many-to-many
+        ray (bool): whether to log metrics with ray
     """                                                        
     optimizer = optimizer(model.parameters(), lr=learning_rate)
     
@@ -59,7 +62,7 @@ def train(model, dataset,
         for batch in train_loader:
             optimizer.zero_grad()
             
-            dist = model(batch['x'])
+            dist = model.forward_m2m(batch['x'], batch['y']) if m2m else model(batch['x'])
             loss, _ = nll(dist, batch['y'])
             loss.backward()
             optimizer.step()
@@ -71,7 +74,8 @@ def train(model, dataset,
             with torch.no_grad():
                 val_loss = 0
                 for batch in val_loader:
-                    vloss,_ = nll(model(batch['x']), batch['y'])
+                    vdist = model.forward_m2m(batch['x'], batch['y']) if m2m else model(batch['x'])
+                    vloss,_ = nll(vdist, batch['y'])
                     val_loss += vloss.item()*len(batch['x'])
                 val_loss /= len(dataset['val'])
 
@@ -98,6 +102,7 @@ def train_mogp(model, dataset,
         optimizer (object): torch optimizer
         learning_rate (float): learning rate for Adam optimizer
         verbose (bool): if true, print epoch losses
+        ray (bool): whether to log metrics with ray
     """
     model.train(), model.likelihood.train()
     optimizer = optimizer([  
@@ -143,6 +148,7 @@ def train_nf(model, dataset:Dict[str,SequenceDataset],
         val_every (int): interval for validation
         learning_rate (float): learning rate for Adam optimizer
         optimizer (torch.optim): torch optimizer
+        ray (bool): whether to log metrics with ray
     """
     # make joint train/val data
     B_train, T, ind = dataset['train'][:]['x'].shape

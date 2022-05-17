@@ -77,14 +77,12 @@ class GaussianNeuralNet(nn.Module):
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
         
-    def forward(self, y, u=None, K=None):
+    def forward(self, y):
         """ 
 
         Run a forward pass of data stream x through the neural network to predict distribution over next K observations.
         Args:
             y (torch.tensor): (B, T, ydim) observations
-            u (torch.tensor or None): (B, T+K, udim) inputs
-            K (int): horizon to predict 
         Returns:
             dist (torch.Distribution): (B,K*ydim) predictive distribution over next K observations
         """
@@ -214,25 +212,54 @@ class GaussianLSTM(nn.Module):
         fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self._num_means+self._num_cov))
         self.fc = nn.Sequential(*fc_net)
         
-    def forward(self, y, u=None, K=None):
+    def forward(self, x):
         """ 
 
-        Run a forward pass of data stream x through the neural network to predict distribution over next K observations.
+        Run a forward pass of data stream x to predict distribution over next K observations.
         Args:
-            y (torch.tensor): (B, T, ydim) observations
-            u (torch.tensor or None): (B, T+K, udim) inputs
-            K (int): horizon to predict 
+            x (torch.tensor): (B, T, dim) observations
+        Returns:
+            dist (torch.Distribution): (B, K*dim) predictive distribution over next K observations
+        """
+        
+        h_0, c_0 = self.initialize_lstm(x)    
+        output_lstm, _ = self.lstm(x, (h_0, c_0))
+        # output_lstm has shape (B, T, hidden_dim)
+        
+        # calculate predictions based on final hidden state
+        dist = self.forward_fc(output_lstm[:,-1])
+        
+        return dist
+
+    def forward_m2m(self, x, y):
+        """ 
+
+        Run a forward pass of data streams x and y to make a many-to-many distribution prediction.
+        Args:
+            x (torch.tensor): (B, T, dim) input observations
+            y (torch.tensor): (B, K, dim) output observations
         Returns:
             dist (torch.Distribution): (B, K*ydim) predictive distribution over next K observations
         """
         
-        h_0, c_0 = self.initialize_lstm(y)    
-        output_lstm, (h_n, c_n) = self.lstm(y, (h_0, c_0))
-        # output_lstm has shape (B, T, hidden_dim)
+        B,T,D = x.shape
+        B2,K,D2 = y.shape
+        assert (B==B2 and D==D2), "forward_m2m input sizes not compatible"
+        assert self.covariance_type=='diagonal'
+
+        h_0, c_0 = self.initialize_lstm(x)    
+        output_lstm, _ = self.lstm(
+            torch.cat((x,y[:,:-1]), 1), 
+            (h_0, c_0)) #(B, T+K-1, hidden_dim)
+        o = output_lstm[:,-K:] #(B, K, hidden_dim)
         
-        # calculate predictions based on final hidden state
-        dist = self.forward_fc(output_lstm[:,-1,:])
-        
+        # calculate predictions based on last K hidden states
+        dist = self.forward_fc(o.reshape(B*K,-1)) # feed (B*K, hidden_dims) through decoder
+
+        # reshape to (B, K*hidden_dims) manually
+        dist.loc = dist.loc.reshape(B,-1)
+        dist.scale = dist.scale.reshape(B,-1)
+        dist._batch_shape = dist.loc.shape
         return dist
     
     def initialize_lstm(self, x):

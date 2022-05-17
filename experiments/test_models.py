@@ -14,7 +14,7 @@ from src.models import *
 from typing import Optional, Dict
 from functools import partial
 
-MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF']
+MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF', 'EncDec']
 #        kernels = {'rbf': gpytorch.kernels.RBFKernel(),
 #           'ind_rbf': gpytorch.kernels.RBFKernel(ard_num_dims=past_dims),
 #           'matern': gpytorch.kernels.MaternKernel(ard_num_dims=past_dims),
@@ -39,7 +39,7 @@ def initialize_model(
         else:
             model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, **model_kwargs)
     
-    elif model_name=='IRNN':
+    elif model_name in ['IRNN','EncDec']:
         if model_kwargs['n_components'] == 1:
             del model_kwargs['n_components']
             model = GaussianLSTM(1, 1, 1, **model_kwargs)
@@ -95,7 +95,7 @@ def train_model(
     if model_name in ['ARMA', 'CG', 'CGMM']:
         model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'])
     
-    elif model_name in ['IFNN','IRNN','JFNN','JRNN']:
+    elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec']:
         train(model, dataset, **train_kwargs)
     
     elif model_name=='MOGP':
@@ -115,7 +115,7 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
     if model_name in ['ARMA','IFNN']:
         samples = sample_forward(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
     
-    elif model_name=='IRNN':
+    elif model_name in ['IRNN','EncDec']:
         samples = sample_forward_lstm(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
     
     elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM']:
