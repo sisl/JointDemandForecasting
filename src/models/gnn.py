@@ -252,14 +252,7 @@ class GaussianLSTM(nn.Module):
             torch.cat((x,y[:,:-1]), 1), 
             (h_0, c_0)) #(B, T+K-1, hidden_dim)
         o = output_lstm[:,-K:] #(B, K, hidden_dim)
-        
-        # calculate predictions based on last K hidden states
-        dist = self.forward_fc(o.reshape(B*K,-1)) # feed (B*K, hidden_dims) through decoder
-
-        # reshape to (B, K*hidden_dims) manually
-        dist.loc = dist.loc.reshape(B,-1)
-        dist.scale = dist.scale.reshape(B,-1)
-        dist._batch_shape = dist.loc.shape
+        dist = self.forward_fc(o)
         return dist
     
     def initialize_lstm(self, x):
@@ -297,7 +290,7 @@ class GaussianLSTM(nn.Module):
 
         Args: 
 
-            h_n (torch tensor): (batch_size, hidden_features) tensor of hidden state values at 
+            h_n (torch tensor): (B, hidden_dim) or (B, K, hidden_dim) tensor of hidden state values at 
                 each point in each sequence. 
 
         Returns: 
@@ -305,7 +298,17 @@ class GaussianLSTM(nn.Module):
 
         """ 
         outputs = self.fc(h_n)
-        # outputs will be (B, 2*K*ydims)
+
+        if len(outputs.shape) == 3:
+            # called from m2m
+            B, K, outdims = outputs.shape
+            outputs = outputs.reshape(B*K,-1)
+            mu = outputs[:,:self._num_means]
+            sig = torch.exp(outputs[:,self._num_means:])
+            dist = D.Normal(loc=mu.reshape(B,-1), scale=sig.reshape(B,-1))
+            return dist
+        
+        # called normally
         B, outdims = outputs.shape
         mu = outputs[:,:self._num_means]
         

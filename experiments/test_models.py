@@ -202,7 +202,7 @@ if __name__=='__main__':
     #    action="store_true")
     #parser.add_argument("--test", help="test stored hyperparameters",
     #    action="store_true")
-    parser.add_argument('-ntestseeds', default=10, type=int,
+    parser.add_argument('-ntestseeds', default=5, type=int,
         help='number of test seeds')
     #parser.add_argument('-ntuneseeds', default=10, type=int,
     #    help='number of tuning seeds')      

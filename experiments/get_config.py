@@ -24,8 +24,12 @@ def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
             batch_size=tune.grid_search([64])))
     
     elif model_name=='EncDec':
-        config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=1, random_start=False))
-        config['train'].update(dict(epochs=200, learning_rate=.005, batch_size=64, m2m=True))
+        config['model'].update(dict(hidden_dim=tune.grid_search([20,40]), 
+            fc_hidden_layers=tune.grid_search([1,2,3]), 
+            fc_hidden_dims=tune.grid_search([16,32]), 
+            n_components=tune.grid_search([1,2,3]), 
+            random_start=False))
+        config['train'].update(dict(epochs=100, learning_rate=.005, batch_size=64, m2m=True))
     
     elif model_name=='CG':
         pass
@@ -57,7 +61,7 @@ def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
         config['train'].update(dict(epochs=55))
     
     elif model_name=='CGMM':
-        config['model'].update(dict(n_components=tune.grid_search([4,5,6,7,8])))
+        config['model'].update(dict(n_components=tune.grid_search([3,4,5,6,7,8,9])))
     
     elif model_name=='CANF':
         config['model'].update(dict(hidden_dim=tune.grid_search([16,32]), 
@@ -87,7 +91,7 @@ def get_config(model_name:str, loc, past_dims, fut_dims):
         config['train'].update(dict(epochs=200, learning_rate=.005, batch_size=64))
     
     elif model_name=='EncDec':
-        config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=2, random_start=False)) #ncomps =1 
+        config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=1, random_start=False)) #ncomps =1 
         config['train'].update(dict(epochs=100, learning_rate=.005, batch_size=64, m2m=True))
 
     elif model_name=='CG':

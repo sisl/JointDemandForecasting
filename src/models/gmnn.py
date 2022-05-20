@@ -277,16 +277,7 @@ class GaussianMixtureLSTM(nn.Module):
             (h_0, c_0)) #(B, T+K-1, hidden_dim)
         o = output_lstm[:,-K:] #(B, K, hidden_dim)
         
-        # calculate predictions based on last K hidden states
-        dist = self.forward_fc(o.reshape(B*K,-1)) # feed (B*K, hidden_dims) through decoder
-
-        import pdb
-        pdb.set_trace()
-        raise NotImplementedError
-        # reshape to (B, K*hidden_dims) manually
-        dist.loc = dist.loc.reshape(B,-1)
-        dist.scale = dist.scale.reshape(B,-1)
-        dist._batch_shape = dist.loc.shape
+        dist = self.forward_fc(o)
         return dist
     
     def initialize_lstm(self, x):
@@ -324,7 +315,7 @@ class GaussianMixtureLSTM(nn.Module):
 
         Args: 
 
-            h_n (torch tensor): (batch_size, hidden_features) tensor of hidden state values at 
+            h_n (torch tensor): (B, hidden_dim) or (B, K, hidden_dim) tensor of hidden state values at 
                 each point in each sequence. 
 
         Returns: 
@@ -332,6 +323,16 @@ class GaussianMixtureLSTM(nn.Module):
 
         """ 
         outputs = self.fc(h_n)
+        if len(outputs.shape) == 3: # from m2m
+            B, K, outdims = outputs.shape
+            logits = outputs[...,:self.n_components]
+            means_stidx, means_endidx = self.n_components, self.n_components*(self._num_means+1)
+            mu = outputs[...,means_stidx:means_endidx]
+            sig = torch.exp(outputs[...,means_endidx:])
+            mix = D.Categorical(logits=logits)
+            comp = D.Normal(loc=mu, scale=sig)
+            return D.MixtureSameFamily(mix, comp)
+
         B, outdims = outputs.shape
         
         probs = nn.functional.softmax(outputs[:,:self.n_components],1)
