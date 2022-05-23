@@ -1,87 +1,43 @@
 import torch
+from itertools import combinations
 
 def index_allocation(samples, min_indices, obj_fn, y_test, alpha, return_scores=False):
     """ 
     Perform index allocation decision problem. 
 
     Args: 
-        samples (torch.tensor): (n, B, K*ydim) tensor of samples
+        samples (torch.tensor): (n_samples, n_test, K*ydim) tensor of samples
         min_indices (int): number of indices to allocate
         obj_fn (function): objective function to minimize. function should be (c, n) -> (c,)
-        y_test (torch.tensor): (B, K, ydim) tensor of true data labels
+        y_test (torch.tensor): (n_test, K, ydim) tensor of true data labels
         alpha (float): final alpha-quantile to report
         return_scores (bool): if True, return score distribution rather than mean
         
     Returns: 
         score (float): final score
     """
-    ntest = samples.shape[1]
-    all_actions = torch.zeros(ntest,min_indices,dtype=torch.long)
+    _, ntest, fut_dims = samples.shape
     
-    # iterate over test sequences
-    for sidx in range(ntest):
-        
-        # generate candidate actions
-        actions = generate_candidate_indices(samples[:,sidx], min_indices)
-
-        # generate utilities from candidate actions
-        utilities = generate_candidate_utility_distributions(samples[:,sidx], actions)
-
-        # store best actions given objective function
-        all_actions[sidx] = optimal_action(actions, utilities, obj_fn)
-
-    scores = linear_score(all_actions, y_test, return_scores=True)
+    # generate all candidate actions
+    candidates = torch.stack([torch.tensor(inds) for inds in combinations(range(fut_dims), min_indices)]) # (c, min_indices)
+    
+    # generate all sum utilites for each candidate
+    utilities = samples[:,:,candidates].sum(-1) # (n_samples, n_test, c)
+    
+    # get action candidate scores in batch
+    # permute: (n_samples, n_test, c) -> (n_test, c, n_samples) 
+    # obj_fn: (n_test, c, n_samples) -> (n_test, c)
+    action_scores = obj_fn(torch.permute(utilities, (1, 2, 0)))
+    
+    # get best actions in batch
+    # argmin: (n_test, c) -> (n_test)
+    # index: (n_test), (c, min_indices)  -> (n_test, min_indices)
+    best_actions = candidates[torch.argmin(action_scores, dim=-1)].long() 
+    
+    # score best actions
+    scores = linear_score(best_actions, y_test, return_scores=True)
     score = var(scores, alpha)
     return (score, scores) if return_scores else score
-    
-def generate_candidate_indices(samples, min_indices):
-    """ 
-    Generate list of candidate minimum indices given samples of forecast trajectories. 
-
-    Args: 
-        samples (torch.tensor): (n,K*ydim) tensor of samples
-        min_indices (int): number of indices to allocate
-
-    Returns: 
-        candidate_actions (torch.tensor): (c, min_indices) tensor of candidate ordered minimum indices
-    """
-    _, indices = torch.sort(samples)
-    indices = indices[:,:min_indices]
-    sorted_indices, _ = torch.sort(indices)
-    candidate_actions = torch.unique(sorted_indices, dim=0)
-    return candidate_actions
-
-def generate_candidate_utility_distributions(samples, candidate_actions):
-    """ 
-    Generate list of utility distributions measuring action utility on samples of forecast trajectories. 
-
-    Args: 
-        samples (torch.tensor): (n,K*ydim) tensor
-        candidate_actions (torch.tensor): (c, min_indices) tensor of candidate ordered minimum indices
-
-    Returns: 
-        candidate_utilities (torch.tensor): (c, n): tensor of candidate sum-min-load distributions
-    """
-    
-    candidate_action_loads = samples[:,candidate_actions] # (n,c,min_indices)
-    candidate_utilities = torch.sum(candidate_action_loads,-1).T
-    return candidate_utilities
-
-def optimal_action(candidate_actions, candidate_utilities, obj_fn):
-    """ 
-    Return the optimal action given candidates, their utility distribution, and an objective function. 
-
-    Args: 
-        candidate_actions (torch.tensor): (c, min_indices) tensor of candidate ordered minimum indices
-        candidate_utilities (torch.tensor): (c, n): tensor of candidate sum-min-load distributions
-        obj_fn (function): objective function to minimize. function should be (c, n) -> (c,)
-        
-    Returns: 
-        best_action (torch.tensor): (min_indices): tensor of candidate sum-min-load distributions
-    """    
-    action_scores = obj_fn(candidate_utilities)
-    best_action = candidate_actions[torch.argmin(action_scores)]
-    return best_action
 
 def best_action_in_test(y_test, min_indices):
     """ 
@@ -201,7 +157,7 @@ def linear_score(charge_indices, true_traj, return_scores=False):
     """ 
     n, min_indices = charge_indices.shape
     best_action_test = best_action_in_test(true_traj, min_indices)
-    traj = true_traj.reshape(n,-1)
+    traj = true_traj.reshape(n,-1).double()
     best_score = torch.gather(traj, 1, best_action_test).sum(-1)
     action_score = torch.gather(traj, 1, charge_indices).sum(-1)
     scores = (action_score-best_score)/best_score

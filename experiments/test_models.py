@@ -9,6 +9,7 @@ from src.utils import *
 from src.train_utils import train, train_mogp
 
 from experiments.charging_utils import *
+from experiments.data_utils import load_data
 from experiments.get_config import get_config, get_config_ray
 from src.models import *
 from typing import Optional, Dict
