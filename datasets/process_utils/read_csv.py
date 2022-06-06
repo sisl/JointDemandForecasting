@@ -68,7 +68,22 @@ def my_to_datetime(date_str):
 def df_to_numpy(df):
     return df.iloc[:,1:].to_numpy(), list(df.columns)[1:]
 
-def encode_features(data, options):
+def rolling_window(data, window:int=36):
+    """
+    Apply rolling window to data along
+        data (np.ndarray): (*, L)-sized data stream
+        window (int): rolling wondow length
+    Returns
+        x (np.ndarray): (*, L-window+1, window) dataset 
+    """
+    n = data.shape[-1]
+    _default_idxs = np.arange(window)
+    _expand_idxs = np.arange(n-window+1)
+    rolling_window_idxs = _default_idxs[np.newaxis] + _expand_idxs[:,np.newaxis]
+    x = data[...,rolling_window_idxs]
+    return x
+
+def encode_features_old(data, options):
     
     n, m = data.shape
     # Assuming data ordering has Hour, Weekday, Month as last 3 

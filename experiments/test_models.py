@@ -150,10 +150,10 @@ def calc_metrics(samples, test_y):
         }
         return metrics
 
-def test(config, model_name=None, loc=None, past_dims=None, fut_dims=None, ray=False):
+def test(config, model_name=None, loc=0, past_dims=None, fut_dims=None, ray=False):
     assert None not in [model_name, loc, past_dims, fut_dims]
     # get dataset and config
-    dataset = load_data(loc, past_dims, fut_dims)
+    dataset = load_data(past_dims, fut_dims, loc=loc)
 
     mogp_data = {
         d:{
