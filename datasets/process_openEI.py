@@ -1,5 +1,4 @@
 import os
-import sys
 import numpy as np
 import tqdm
 import pandas as pd
@@ -27,7 +26,6 @@ with tqdm.tqdm(total=chosenfiles) as pbar:
         print(path)
         df = read_load_csv(path, load_features)
         data, labels = df_to_numpy(df)
-        # x = rolling_window(data[:,0], window=rw_length)
         Xs.append(data[:,0])
         filename.append(file)
         loadnum += 1
