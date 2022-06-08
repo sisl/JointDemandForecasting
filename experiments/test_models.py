@@ -111,24 +111,24 @@ def train_model(
     return model
 
 def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000):
-    fut_dims = dataset['test'][:]['y'].shape[1]
+    fut_dims = dataset['y'].shape[1]
     model.eval()
     if model_name in ['ARMA','IFNN']:
-        samples = sample_forward(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
+        samples = sample_forward(model, dataset['x'], fut_dims, n_samples=n_samples)
     
     elif model_name in ['IRNN','EncDec']:
-        samples = sample_forward_lstm(model, dataset['test'][:]['x'], fut_dims, n_samples=n_samples)
+        samples = sample_forward_lstm(model, dataset['x'], fut_dims, n_samples=n_samples)
     
     elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM']:
-        samples = model(dataset['test'][:]['x']).sample((n_samples,))
+        samples = model(dataset['x']).sample((n_samples,))
 
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            samples = model(mogp_data['test']['x']).sample(torch.Size([n_samples]))
+            samples = model(mogp_data['x']).sample(torch.Size([n_samples]))
     
     elif model_name=='CANF':
-        dist = model(dataset['test'][:]['x'])
+        dist = model(dataset['x'])
         samples = []
         for _ in range(n_samples//200):
             s = dist.sample((200,))
@@ -150,10 +150,17 @@ def calc_metrics(samples, test_y):
         }
         return metrics
 
-def test(config, model_name=None, loc=0, past_dims=None, fut_dims=None, ray=False):
+def test(config, 
+    model_name=None, 
+    loc=0, 
+    past_dims=None, 
+    fut_dims=None, 
+    ray=False, 
+    split_test=True):
+    
     assert None not in [model_name, loc, past_dims, fut_dims]
     # get dataset and config
-    dataset = load_data(past_dims, fut_dims, loc=loc)
+    dataset = load_data(past_dims, fut_dims, loc=loc, split_test=split_test)
 
     mogp_data = {
         d:{
@@ -177,11 +184,21 @@ def test(config, model_name=None, loc=0, past_dims=None, fut_dims=None, ray=Fals
     #except:
     #    continue
     
-    # test
-    samples = generate_samples(model_name, model, dataset, n_samples=1000, mogp_data=mogp_data)
+    
+    # Generate val and test metrics 
+    
+    metrics = {}
+    for data_type in ['val', 'test']:
+    
+        # gen samples
+        samples = generate_samples(model_name, model, dataset[data_type][:], 
+            n_samples=1000, 
+            mogp_data=mogp_data[data_type] if mogp_data is not None else None)
 
-    # get and print metrics
-    metrics = calc_metrics(samples, dataset['test'][:]['y'])
+        # get and print metrics
+        _met = calc_metrics(samples, dataset[data_type][:]['y'])
+        metrics.update({f'{data_type}_{key}': value for key, value in _met.items()})
+    
     if ray:
         tune.report(**metrics)
     else:

@@ -9,7 +9,7 @@ from typing import Dict
 
 BASE_PATH = os.path.normpath(os.path.join(os.path.dirname(src.__file__), '..'))
 
-def random_week_train_test_split(X, test_prop=0.25, random_state=1, window=36, split_test=False):
+def random_week_train_test_split(X, test_prop=0.3, random_state=1, window=36, split_test=False):
     """
     Performs train/test split for electric dataset by avoiding overlaps in weekly rolling windows.
     
@@ -58,11 +58,11 @@ def random_week_train_test_split(X, test_prop=0.25, random_state=1, window=36, s
         val = test[idxs[:len(idxs)//2]]
         test = test[idxs[len(idxs)//2:]]
     else:
-        val = test.copy()
+        val = test.clone()
 
     return train, val, test  
 
-def time_series_train_test_split(X, test_prop=0.25, random_state=1, window=36, split_test=False):
+def time_series_train_test_split(X, test_prop=0.3, random_state=1, window=36, split_test=False):
     """
     Performs train/test split by reserving last test_prop portion of sequence for testing.
     
@@ -96,7 +96,7 @@ def time_series_train_test_split(X, test_prop=0.25, random_state=1, window=36, s
         val = test[idxs[:len(idxs)//2]]
         test = test[idxs[len(idxs)//2:]]
     else:
-        val = test.copy()
+        val = test.clone()
 
     return train, val, test
 

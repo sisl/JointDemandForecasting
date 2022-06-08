@@ -78,7 +78,7 @@ class ConditionalGMM(nn.Module):
         dist = D.MixtureSameFamily(mix, comp)
         return dist
    
-    def fit(self, y, y_future, attempts:int=3):
+    def fit(self, y, y_future, attempts:int=1):
         """ 
 
         Fit model given data of past and future observations
@@ -100,8 +100,9 @@ class ConditionalGMM(nn.Module):
                 self.gmm = GaussianMixture(n_components = self.n_components)
                 self.gmm.fit(torch.cat((X,Y), 1).cpu().numpy())
                 break
-            if i+1 == attempts:
-                raise(f'GMM not fit in {attempts} attempts')
+            except:
+                if (i+1) == attempts:
+                    raise(f'GMM not fit in {attempts} attempts')
         
         self.pi_ = torch.tensor(self.gmm.weights_).float().to(device)
         self.mu_ = torch.tensor(self.gmm.means_).float().to(device)
