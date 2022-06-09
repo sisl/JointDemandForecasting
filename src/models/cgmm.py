@@ -102,7 +102,7 @@ class ConditionalGMM(nn.Module):
                 break
             except:
                 if (i+1) == attempts:
-                    raise(f'GMM not fit in {attempts} attempts')
+                    raise Exception(f'GMM not fit in {attempts} attempts')
         
         self.pi_ = torch.tensor(self.gmm.weights_).float().to(device)
         self.mu_ = torch.tensor(self.gmm.means_).float().to(device)

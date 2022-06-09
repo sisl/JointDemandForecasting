@@ -55,7 +55,7 @@ def train(model, dataset,
     
     train_loader = DataLoader(dataset['train'], batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset['val'], batch_size=batch_size)
-    
+
     # train the model
     for i in range(epochs):
         epoch_loss = 0
@@ -63,7 +63,7 @@ def train(model, dataset,
             optimizer.zero_grad()
             
             dist = model.forward_m2m(batch['x'], batch['y']) if m2m else model(batch['x'])
-            loss, _ = nll(dist, batch['y'])
+            loss, _ = nll(dist, batch['y'][:,:model.K])
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()*len(batch['x'])
@@ -75,7 +75,7 @@ def train(model, dataset,
                 val_loss = 0
                 for batch in val_loader:
                     vdist = model.forward_m2m(batch['x'], batch['y']) if m2m else model(batch['x'])
-                    vloss,_ = nll(vdist, batch['y'])
+                    vloss,_ = nll(vdist, batch['y'][:,:model.K])
                     val_loss += vloss.item()*len(batch['x'])
                 val_loss /= len(dataset['val'])
 

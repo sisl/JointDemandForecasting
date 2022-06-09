@@ -101,8 +101,7 @@ def time_series_train_test_split(X, test_prop=0.3, random_state=1, window=36, sp
     return train, val, test
 
 
-def load_data(past_dims, fut_dims, 
-    dataset='openei', 
+def load_data(dataset, past_dims, fut_dims,  
     loc=0, 
     window=36, 
     split_fn=random_week_train_test_split,
@@ -119,10 +118,13 @@ def load_data(past_dims, fut_dims,
     assert past_dims+fut_dims <= window, "too many total dimensions in sequence lengths" 
     if dataset=='openei':
         path = os.path.join(BASE_PATH,"datasets/processed/openEI/openei_011_subset.pt")
-    elif dataset=='iso-ne':
-        #path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_8760.pt")
-        #path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_17520.pt")
-        #path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_26280.pt")
+    elif dataset=='iso-ne1':
+        path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_8760.pt")
+    elif dataset=='iso-ne2':
+        path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_17520.pt")
+    elif dataset=='iso-ne3':
+        path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_26280.pt")
+    elif dataset=='iso-ne4':
         path = os.path.join(BASE_PATH,"datasets/processed/iso-ne/iso-ne_35064.pt")
     elif dataset=='nau':
         path = os.path.join(BASE_PATH,"datasets/processed/nau/nau.pt")
