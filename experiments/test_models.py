@@ -285,11 +285,13 @@ if __name__=='__main__':
                 summary['mean_'+key] = mu
                 summary['std_'+key] = sig
 
-            # try to remove outliers - indices outside 3stds for RWSE
+            # try to remove outliers - indices outside 1.5*IQR from Q1, Q3
             try:
                 vec = np.array(metrics['test_RWSE'])
-                mu, sig = np.mean(vec).item(), np.std(vec).item()
-                good_idxs = np.where(np.abs(vec-mu)/sig < 3)
+                q1, q2, q3 = np.quantile(vec,.25), np.quantile(vec,.5), np.quantile(vec,.75)
+                iqr = q3-q1
+                lf, uf = q1-1.5*iqr, q3+1.5*iqr
+                good_idxs = np.where((vec < uf) & (vec > lf))
                 summary['outlierprop'] = 1. - len(good_idxs)/len(vec)
                 
                 for key, val in metrics.items():
