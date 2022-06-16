@@ -168,6 +168,34 @@ def rwse(dist, target, n=1000, sampled=False):
     return rwse, wse_mean, wse_std
 
 def sample_forward(model, y, prediction_horizon, n_samples=1000):
+    """
+    Iteratively sample forward from a model in batch
+
+    Args:
+        model (nn.Module): torch model that returns a dist on forward call
+        y (torch.tensor): (B, input_horizon, O) shaped data stream
+        prediction_horizon (int): horizon to iteratively go forward
+        n_samples (int): number of samples to generate for each data stream
+    Returns
+        samples (torch.tensor): (n_samples, B, prediction_horizon*O) tensor of samples
+    """
+
+    model.eval()
+    B, T, O = y.shape
+    inp = y.unsqueeze(0).expand(n_samples,-1, -1, -1).reshape(B*n_samples, T, O)
+    out = torch.zeros(B*n_samples, prediction_horizon, O)
+
+    for i in range(prediction_horizon):
+        dist = model(inp)
+        out[:,[i]] = dist.sample().reshape(B*n_samples, 1, O)
+        inp = torch.cat((inp[:,1:], out[:,[i]]), dim=1)
+    samples = out.reshape(n_samples, B, prediction_horizon*O)
+    return samples
+
+
+def sample_forward_old(model, y, prediction_horizon, n_samples=1000):
+    # (y: (B, T, 1))
+
     samples = []
     for iS in range(n_samples):
         # initial step
