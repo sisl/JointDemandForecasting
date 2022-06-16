@@ -17,7 +17,10 @@ class GaussianMixtureNeuralNet(nn.Module):
         rank=2, 
         bands=2, 
         tied=False, 
-        dropout=0.0):
+        dropout=0.0,
+        clamp_min=0.,
+        clamp_max=1e7,
+        sig_eps=1e-2):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -53,7 +56,10 @@ class GaussianMixtureNeuralNet(nn.Module):
         if self.tied:
             raise("Tied covariances not yet implemented")
         self.dropout = dropout
-        
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.sig_eps = sig_eps
+
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
@@ -107,7 +113,8 @@ class GaussianMixtureNeuralNet(nn.Module):
         
         means_endidx = self.n_components*(self._num_means+1)
         mu = outputs[:,self.n_components:means_endidx].reshape(B, self.n_components, self._num_means)
-        
+        mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+
         # full covariance matrix
         if self.covariance_type == 'full':
             n_diags = self.n_components*self._num_means
@@ -124,6 +131,7 @@ class GaussianMixtureNeuralNet(nn.Module):
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
             sig = torch.exp(outputs[:,means_endidx:]).reshape(B, self.n_components, self._num_means)
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
             dist = D.Normal(loc=mu, scale=sig)
             comp = D.Independent(dist,1)
             
@@ -167,7 +175,10 @@ class GaussianMixtureLSTM(nn.Module):
         num_layers=1, 
         dropout=0.0,
         bidirectional=False, 
-        random_start=True):
+        random_start=True,
+        clamp_min=0.,
+        clamp_max=1e7,
+        sig_eps=1e-2):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -211,7 +222,9 @@ class GaussianMixtureLSTM(nn.Module):
         self.dropout = dropout
         self.bidirectional = bidirectional
         self.random_start = random_start
-            
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.sig_eps = sig_eps    
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
                           num_layers=self.num_layers, batch_first=True,
                           dropout=self.dropout, bidirectional=self.bidirectional)
@@ -329,6 +342,8 @@ class GaussianMixtureLSTM(nn.Module):
             means_stidx, means_endidx = self.n_components, self.n_components*(self._num_means+1)
             mu = outputs[...,means_stidx:means_endidx]
             sig = torch.exp(outputs[...,means_endidx:])
+            mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
             mix = D.Categorical(logits=logits)
             comp = D.Normal(loc=mu, scale=sig)
             return D.MixtureSameFamily(mix, comp)
@@ -340,7 +355,8 @@ class GaussianMixtureLSTM(nn.Module):
         
         means_endidx = self.n_components*(self._num_means+1)
         mu = outputs[:,self.n_components:means_endidx].reshape(B, self.n_components, self._num_means)
-        
+        mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+            
         # full covariance matrix
         if self.covariance_type == 'full':
             n_diags = self.n_components*self._num_means
@@ -357,6 +373,7 @@ class GaussianMixtureLSTM(nn.Module):
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
             sig = torch.exp(outputs[:,means_endidx:]).reshape(B, self.n_components, self._num_means)
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
             dist = D.Normal(loc=mu, scale=sig)
             comp = D.Independent(dist,1)
             

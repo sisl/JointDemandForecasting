@@ -15,7 +15,10 @@ class GaussianNeuralNet(nn.Module):
         covariance_type='diagonal', 
         rank=2, 
         bands=2, 
-        dropout=0.0):
+        dropout=0.0,
+        clamp_min=0.,
+        clamp_max=1e7,
+        sig_eps=1e-2):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -43,7 +46,10 @@ class GaussianNeuralNet(nn.Module):
         self.rank = rank
         self.bands = bands
         self.dropout = dropout
-            
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.sig_eps = sig_eps
+
         fc_net = []
         fc_sizes = np.append(self.input_dim * self.T, self.hidden_layer_dims)
         for i in range(len(fc_sizes)-1):
@@ -91,7 +97,7 @@ class GaussianNeuralNet(nn.Module):
         inputs = y.reshape((B, T*ydim))
         outputs = self.fc(inputs)
         B, outdims = outputs.shape
-        mu = outputs[:,:self._num_means]
+        mu = torch.clamp(outputs[:,:self._num_means], min=self.clamp_min, max=self.clamp_max)
         
         # full covariance matrix
         if self.covariance_type == 'full':
@@ -107,7 +113,7 @@ class GaussianNeuralNet(nn.Module):
         
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
-            sig = torch.exp(outputs[:,self._num_means:])
+            sig = torch.clamp(torch.exp(outputs[:,self._num_means:]), min=self.sig_eps, max=self.clamp_max)
             dist = D.Normal(loc=mu, scale=sig)
             
         # low-rank covariance matrix
@@ -143,7 +149,10 @@ class GaussianLSTM(nn.Module):
         num_layers=1, 
         dropout=0.0,
         bidirectional=False, 
-        random_start=False):
+        random_start=False,
+        clamp_min=0.,
+        clamp_max=1e7,
+        sig_eps=1e-2):
         """ 
 
         Initializes sequence-to-sequence LSTM model. 
@@ -181,7 +190,9 @@ class GaussianLSTM(nn.Module):
         self.dropout = dropout
         self.bidirectional = bidirectional
         self.random_start = random_start
-            
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.sig_eps = sig_eps    
         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
                           num_layers=self.num_layers, batch_first=True,
                           dropout=self.dropout, bidirectional=self.bidirectional)
@@ -305,13 +316,16 @@ class GaussianLSTM(nn.Module):
             outputs = outputs.reshape(B*K,-1)
             mu = outputs[:,:self._num_means]
             sig = torch.exp(outputs[:,self._num_means:])
+            mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
             dist = D.Normal(loc=mu.reshape(B,-1), scale=sig.reshape(B,-1))
             return dist
         
         # called normally
         B, outdims = outputs.shape
         mu = outputs[:,:self._num_means]
-        
+        mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+
         # full covariance matrix
         if self.covariance_type == 'full':
             diag = torch.exp(outputs[:,self._num_means:2*self._num_means])
@@ -327,6 +341,7 @@ class GaussianLSTM(nn.Module):
         # isotropic normal distribution
         elif self.covariance_type == 'diagonal':
             sig = torch.exp(outputs[:,self._num_means:])
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
             dist = D.Normal(loc=mu, scale=sig)
             
         # low-rank covariance matrix
