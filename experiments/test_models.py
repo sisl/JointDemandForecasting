@@ -15,7 +15,8 @@ from typing import Optional, Dict
 from functools import partial
 BASEPATH = os.path.dirname(os.path.abspath(__file__))
 
-MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF', 'EncDec']
+MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF', 
+    'EncDec', 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec']
 DATASETS=['openei', 'nau', 'iso-ne1', 'iso-ne2', 'iso-ne3', 'iso-ne4']
 #        kernels = {'rbf': gpytorch.kernels.RBFKernel(),
 #           'ind_rbf': gpytorch.kernels.RBFKernel(ard_num_dims=past_dims),
@@ -41,13 +42,22 @@ def initialize_model(
         else:
             model = GaussianMixtureNeuralNet(1, past_dims, 1, 1, **model_kwargs)
     
+    elif model_name=='ResNN':
+        model = GaussianResnet(1, past_dims, 1, 1, **model_kwargs)
+    
+    elif model_name in ['QRes','QResPinb']:
+        model = QuantileResnet(1, past_dims, 1, 1, **model_kwargs)
+
     elif model_name in ['IRNN','EncDec']:
         if model_kwargs['n_components'] == 1:
             del model_kwargs['n_components']
             model = GaussianLSTM(1, 1, 1, **model_kwargs)
         else:
-            model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)          
-    
+            model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)
+
+    elif model_name in ['QRNN', 'QRNNPinb','QRNNDec']:
+        model = QuantileLSTM(1, 1, 1, **model_kwargs)
+
     elif model_name=='CG':
         model = BayesianLinearRegression(1, past_dims, 1, fut_dims)
     
@@ -88,18 +98,23 @@ def train_model(
     mogp_data:Optional[Dict[str, torch.Tensor]]=None,
     **train_kwargs):
     
-    # update training data for single step in iterative models
-    #if model_name in ['ARMA', 'IFNN', 'IRNN']:
-    #    for key in ['train', 'val']:
-    #        dataset[key].data['y'] = dataset[key].data['y'][:,[0]]
+    # 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec'
 
     # train models
     if model_name in ['ARMA', 'CG', 'CGMM']:
         model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,:model.K])
     
-    elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec']:
+    elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec', 'ResNN', 'QRes']:
         train(model, dataset, **train_kwargs)
     
+    elif model_name in ['QResPinb','QRNNPinb']:
+        # implement pinball loss training
+        raise NotImplementedError
+
+    elif model_name in ['QRNN', 'QRNNDec']:
+        # implement QuantileLSTM model then move these to train(..) option
+        raise NotImplementedError
+
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     
         train_mogp(model, mogp_data, **train_kwargs)
@@ -115,10 +130,10 @@ def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000)
     fut_dims = dataset['y'].shape[1]
     model.eval()
 
-    if model_name in ['ARMA','IFNN']:
+    if model_name in ['ARMA','IFNN','ResNN','QRes','QResPinb']:
         samples = sample_forward(model, dataset['x'], fut_dims, n_samples=n_samples)
     
-    elif model_name in ['IRNN','EncDec']:
+    elif model_name in ['IRNN','EncDec','QRNN','QRNNPinb','QRNNDec']:
         samples = sample_forward_lstm(model, dataset['x'], fut_dims, n_samples=n_samples)
     
     elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM']:

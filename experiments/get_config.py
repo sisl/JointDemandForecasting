@@ -1,4 +1,6 @@
 from ray import tune
+# MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF', 
+#     'EncDec', 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec']
 
 def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
     config = {'seed':tune.grid_search(list(range(nseeds))), 'model':{}, 'train':{}}    
@@ -12,7 +14,36 @@ def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
         config['train'].update(dict(epochs=150, 
             learning_rate=.005, 
             batch_size=64))
+
+    elif model_name=='ResNN':
+        config['model'].update(dict(hidden_layers=4, 
+            hidden_dims=20, 
+            large_skip_every=2,
+            in_out_skip=True))
+        config['train'].update(dict(epochs=150, 
+            learning_rate=.005, 
+            batch_size=64))
     
+    elif model_name=='QRes':
+        config['model'].update(dict(hidden_layers=4, 
+            hidden_dims=20, 
+            large_skip_every=2,
+            in_out_skip=True,
+            n_quantiles=5))
+        config['train'].update(dict(epochs=150, 
+            learning_rate=.005, 
+            batch_size=64))
+
+    elif model_name=='QResPinb':
+        config['model'].update(dict(hidden_layers=4, 
+            hidden_dims=20, 
+            large_skip_every=2,
+            in_out_skip=True,
+            n_quantiles=5))
+        config['train'].update(dict(epochs=150, 
+            learning_rate=.005, 
+            batch_size=64))
+
     elif model_name=='IRNN':
         config['model'].update(dict(hidden_dim=tune.grid_search([20,40]), 
             fc_hidden_layers=tune.grid_search([1,2,3]), 
@@ -86,6 +117,18 @@ def get_config(model_name:str, loc, past_dims, fut_dims):
         config['model'].update(dict(hidden_layers=3, hidden_dims=40, n_components=3))
         config['train'].update(dict(epochs=150, learning_rate=.005, batch_size=64))
     
+    elif model_name=='ResNN':
+        config['model'].update(dict(hidden_layers=4, hidden_dims=20))
+        config['train'].update(dict(epochs=150, learning_rate=.005, batch_size=64))
+
+    elif model_name=='QRes':
+        config['model'].update(dict(hidden_layers=4, hidden_dims=20, n_quantiles=5))
+        config['train'].update(dict(epochs=150, learning_rate=.005, batch_size=64))
+
+    elif model_name=='QResPinb':
+        config['model'].update(dict(hidden_layers=4, hidden_dims=20, n_quantiles=5))
+        config['train'].update(dict(epochs=150, learning_rate=.005, batch_size=64))
+
     elif model_name=='IRNN':
         config['model'].update(dict(hidden_dim=40, fc_hidden_layers=3, fc_hidden_dims=20, n_components=1, random_start=False))
         config['train'].update(dict(epochs=200, learning_rate=.005, batch_size=64))

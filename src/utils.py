@@ -168,7 +168,6 @@ def rwse(dist, target, n=1000, sampled=False):
     return rwse, wse_mean, wse_std
 
 def sample_forward(model, y, prediction_horizon, n_samples=1000):
-    
     samples = []
     for iS in range(n_samples):
         # initial step
@@ -176,7 +175,7 @@ def sample_forward(model, y, prediction_horizon, n_samples=1000):
         sequence = [new_sample] #(B, 1)
         
         fut_y = y
-        for _ in range(1, prediction_horizon):
+        for iH in range(1, prediction_horizon):
 
             # append to end of input sequence (OPENEI DATA)
             fut_y = torch.cat((fut_y[:,1:,:],sequence[-1].unsqueeze(-1)),1)
