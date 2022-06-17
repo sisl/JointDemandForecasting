@@ -192,58 +192,32 @@ def sample_forward(model, y, prediction_horizon, n_samples=1000):
     samples = out.reshape(n_samples, B, prediction_horizon*O)
     return samples
 
-
-def sample_forward_old(model, y, prediction_horizon, n_samples=1000):
-    # (y: (B, T, 1))
-
-    samples = []
-    for iS in range(n_samples):
-        # initial step
-        new_sample = model(y).sample()
-        sequence = [new_sample] #(B, 1)
-        
-        fut_y = y
-        for iH in range(1, prediction_horizon):
-
-            # append to end of input sequence (OPENEI DATA)
-            fut_y = torch.cat((fut_y[:,1:,:],sequence[-1].unsqueeze(-1)),1)
-
-            # run through model
-            dist = model(fut_y)
-
-            # generate next time series
-            next_step = dist.sample()
-            sequence.append(next_step)
-        samples.append(torch.cat(sequence,1))    
-    samples = torch.stack(samples,0)
-    return samples
-
 def sample_forward_lstm(model, y, prediction_horizon, n_samples=1000):
-    samples = []
-    for i in range(n_samples):
-        
-        ## MUST GO THROUGH LSTM BY HAND FOR HIDDEN STATES
-        # initial step
-        h_0, c_0 = model.initialize_lstm(y)    
-        output_lstm, (h_n, c_n) = model.lstm(y, (h_0, c_0))
+    """
+    Iteratively sample forward from a model in batch through an lstm
+
+    Args:
+        model (nn.Module): torch model that returns a dist on forward call
+        y (torch.tensor): (B, input_horizon, O) shaped data stream
+        prediction_horizon (int): horizon to iteratively go forward
+        n_samples (int): number of samples to generate for each data stream
+    Returns
+        samples (torch.tensor): (n_samples, B, prediction_horizon*O) tensor of samples
+    """
+    model.eval()
+    B, T, O = y.shape
+    inp = y.unsqueeze(0).expand(n_samples,-1, -1, -1).reshape(B*n_samples, T, O)
+    out = torch.zeros(B*n_samples, prediction_horizon, O)
+    h_0, c_0 = model.initialize_lstm(inp)   
+
+    output_lstm, (h_n, c_n) = model.lstm(inp, (h_0, c_0))
+    dist = model.forward_fc(output_lstm[:,-1,:])
+    out[:,[0]] = dist.sample().reshape(B*n_samples, 1, O)
+    for i in range(1, prediction_horizon):
+        output_lstm, (h_n, c_n) = model.lstm(out[:,[i-1]], (h_n, c_n))
         dist = model.forward_fc(output_lstm[:,-1,:])
-        new_sample = dist.sample()
-        sequence = [new_sample] #(B, 1)   
-        for _ in range(1, prediction_horizon):
-
-            # put last sample through lstm
-            output_lstm, (h_n, c_n) = model.lstm(sequence[-1].unsqueeze(-1), (h_n, c_n))
-            
-            # run through model
-            dist = model.forward_fc(output_lstm[:,-1,:])
-
-            # generate next time series
-            next_step = dist.sample()
-            sequence.append(next_step)
-            
-        samples.append(torch.cat(sequence,1)) 
-        
-    samples = torch.stack(samples,0)
+        out[:,[i]] = dist.sample().reshape(B*n_samples, 1, O)
+    samples = out.reshape(n_samples, B, prediction_horizon*O)
     return samples
 
 def sample_forward_singlepoint(model, y, prediction_horizon, n_samples=1000):   
