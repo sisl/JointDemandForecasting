@@ -6,7 +6,7 @@ from ray import tune
 import json
 import src
 from src.utils import *
-from src.train_utils import train, train_mogp
+from src.train_utils import train, train_mogp, train_pinball
 from experiments.charging_utils import *
 from experiments.data_utils import load_data
 from experiments.get_config import get_config, get_config_ray
@@ -104,16 +104,14 @@ def train_model(
     if model_name in ['ARMA', 'CG', 'CGMM']:
         model.fit(dataset['train'][:]['x'], dataset['train'][:]['y'][:,:model.K])
     
-    elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec', 'ResNN', 'QRes']:
+    elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec', 'ResNN']:
         train(model, dataset, **train_kwargs)
     
-    elif model_name in ['QResPinb','QRNNPinb']:
-        # implement pinball loss training
-        raise NotImplementedError
+    elif model_name in ['QRes', 'QRNN', 'QRNNDec']:
+        raise Exception('NLL not working for quantile models')
 
-    elif model_name in ['QRNN', 'QRNNDec']:
-        # implement QuantileLSTM model then move these to train(..) option
-        raise NotImplementedError
+    elif model_name in ['QResPinb','QRNNPinb','QRNNDecPinb']:
+        train_pinball(model, dataset, **train_kwargs)
 
     elif model_name=='MOGP':
         assert mogp_data is not None, "No train_x, train_y passed"     

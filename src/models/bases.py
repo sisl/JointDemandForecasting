@@ -99,7 +99,10 @@ class QuantileResnet(nn.Module):
         hidden_dims=40,
         large_skip_every=2,
         in_out_skip=True,
-        quantiles=5):
+        n_quantiles=5,
+        clamp_min=0.,
+        clamp_max=1e7,
+        del_eps=1e-2):
         """ 
 
         Initializes autoregressive, probabilistic feedforward neural network model. 
@@ -148,7 +151,10 @@ class QuantileResnet(nn.Module):
             raise NotImplementedError
         self.quantiles = torch.tensor(self.quantiles)
         self.last_linear = nn.Linear(in_features=indims, out_features=self.n_quantiles)
-        
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.del_eps = del_eps
+
     def forward_quantiles(self, y):
         """ 
 
@@ -172,8 +178,10 @@ class QuantileResnet(nn.Module):
             x = x + start
         outputs = self.last_linear(x)
         B, outdims = outputs.shape
-        quantiles = outputs[:,[0]].expand(-1, outdims) 
+        quantiles = outputs[:,[0]].expand(-1, outdims)
+        quantiles = torch.clamp(quantiles, min=self.clamp_min, max=self.clamp_max) 
         dels = torch.exp(outputs[:,1:])
+        dels = torch.clamp(dels, min=self.del_eps, max=self.clamp_max)
         quantiles[:,1:] += torch.cumsum(dels, dim=-1)
         return quantiles
 
@@ -187,27 +195,204 @@ class QuantileResnet(nn.Module):
         """
         output = self.forward_quantiles(y) #(B, nq)
         B, nq = output.shape
+        output = output.unsqueeze(-1) #(B, nq, 1)
 
         # use MixtureSameFamily to make a piecewise uniform distribution
         # mixture probability is categorical of size (B, nq-1) based on quantile values
         prob = (self.quantiles[1:] - self.quantiles[:-1]).unsqueeze(0).expand(B,-1) 
-        prob *= 100/98 # adjust to ignore bottom and top 1%
+        prob = prob*100/98 # adjust to ignore bottom and top 1%
         mix = D.Categorical(prob)
 
-        # upper and lower are each (B, nq-1) based on output
-        lower, upper = output[:,:-1], output[:,1:]
-        comp = D.Uniform(lower, upper) # does this require D.Independent??
-
+        # upper and lower are each (B, nq-1, 1) based on output
+        lower, upper = output[:,:-1], output[:,1:]+self.del_eps
+        comp = D.Independent(D.Uniform(lower, upper), 1)
         dist = D.MixtureSameFamily(mix, comp)
+        
         return dist
-
 
 class QuantileLSTM(nn.Module):
     """
     Class for LSTM that predicts quantiles.
     Similar to `Probabilistic Individual Load Forecasting Using Pinball Loss Guided LSTM`
     """
-    def __init__(self):
-        pass
-    def forward(self):
-        pass
+    def __init__(self, input_dim, output_dim, prediction_horizon,
+        hidden_dim=20,
+        fc_hidden_layers=2,
+        fc_hidden_dims=20,
+        num_layers=1, 
+        dropout=0.0,
+        bidirectional=False, 
+        random_start=False,
+        n_quantiles=5,
+        clamp_min=0.,
+        clamp_max=1e7,
+        del_eps=1e-2):
+        """ 
+
+        Initializes sequence-to-sequence LSTM model. 
+
+        Args: 
+
+            input_dim (int): number of input dimensions at each step in the series 
+            output_dim (int): the dimension of the outputs at each point in the sequence
+            prediction_horizon (int): the prediction horizon K
+            hidden_dim (int): number of hidden/cell dimensions
+            fc_hidden_layers (int): number of hidden layers in the decoder network
+            fc_hidden_dims (int): number of hidden dims in each layer
+            num_layers (int): number of layers in a possibly stacked LSTM
+            dropout (float): the dropout rate of the lstm
+            bidirectional (bool): whether to initialize a bidirectional lstm
+            random_start (bool): If true, will initialize the hidden states randomly from a unit Gaussian
+        """ 
+        super(QuantileLSTM, self).__init__()
+        
+        # dimensional parameters
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.fc_hidden_layer_dims = [fc_hidden_dims for _ in range(fc_hidden_layers)]
+        self.output_dim = output_dim
+        self.K = prediction_horizon
+              
+        # LSTM parameters
+        self.num_layers = num_layers
+        self.dropout = dropout
+        self.bidirectional = bidirectional
+        self.random_start = random_start
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+        self.del_eps = del_eps    
+        self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.hidden_dim,
+                          num_layers=self.num_layers, batch_first=True,
+                          dropout=self.dropout, bidirectional=self.bidirectional)
+        
+        fc_net = []
+        fc_sizes = np.append(self.hidden_dim, self.fc_hidden_layer_dims)
+        for i in range(len(fc_sizes)-1):
+            fc_net.append(nn.Linear(in_features=fc_sizes[i], out_features=fc_sizes[i+1]))
+            fc_net.append(nn.LeakyReLU())
+        
+        self.n_quantiles = n_quantiles
+        if n_quantiles == 5:
+            self.quantiles = [.01, .25, .5, .75, .99]
+        elif n_quantiles == 7:
+            self.quantiles = [.01, .1, .25, .5, .75, .9, .99]
+        elif n_quantiles == 11:
+            self.quantiles = [.01, .1, .2, .3, .4, .5, .6, .7, .8, .9, .99]  
+        else:
+            raise NotImplementedError
+        self.quantiles = torch.tensor(self.quantiles)
+        fc_net.append(nn.Linear(in_features=fc_sizes[-1], out_features=self.n_quantiles))
+        self.fc = nn.Sequential(*fc_net)
+        
+    def initialize_lstm(self, x):
+        """ 
+
+        Initialize the lstm either randomly or with zeros. 
+
+        Args: 
+
+            x (torch tensor): (batch_size, sequence_length, input_features) tensor of inputs to the lstm. 
+
+        Returns: 
+
+            h_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_dim) tensor for initial hidden state
+            c_0 (torch tensor): (num_layers*num_directions, batch_size, hidden_dim) tensor for initial cell state 
+
+        """ 
+        batch_index = 0
+        num_direction = 2 if self.bidirectional else 1
+        device = torch.device("cuda" if next(self.parameters()).is_cuda else "cpu")
+
+        # Hidden state in first seq of the LSTM - use noisy state initialization if random_start is True
+        if self.random_start:
+            h_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+            c_0 = torch.randn(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+        else:
+            h_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+            c_0 = torch.zeros(self.num_layers * num_direction, x.size(batch_index), self.hidden_dim).to(device)
+        return h_0, c_0
+        
+    def forward(self, x):
+        """ 
+
+        Run a forward pass of data stream x to predict distribution over next K observations.
+        Args:
+            x (torch.tensor): (B, T, dim) observations
+        Returns:
+            dist (torch.Distribution): (B, K*dim) predictive distribution over next K observations
+        """
+        
+        h_0, c_0 = self.initialize_lstm(x)    
+        output_lstm, _ = self.lstm(x, (h_0, c_0))
+        # output_lstm has shape (B, T, hidden_dim)
+        
+        # calculate predictions based on final hidden state
+        dist = self.forward_fc(output_lstm[:,-1])
+        
+        return dist
+
+    def forward_m2m(self, x, y):
+        """ 
+
+        Run a forward pass of data streams x and y to make a many-to-many distribution prediction.
+        Args:
+            x (torch.tensor): (B, T, dim) input observations
+            y (torch.tensor): (B, K, dim) output observations
+        Returns:
+            dist (torch.Distribution): (B, K*ydim) predictive distribution over next K observations
+        """
+        
+        B,T,D = x.shape
+        B2,K,D2 = y.shape
+        assert (B==B2 and D==D2), "forward_m2m input sizes not compatible"
+        assert self.covariance_type=='diagonal'
+
+        h_0, c_0 = self.initialize_lstm(x)    
+        output_lstm, _ = self.lstm(
+            torch.cat((x,y[:,:-1]), 1), 
+            (h_0, c_0)) #(B, T+K-1, hidden_dim)
+        o = output_lstm[:,-K:] #(B, K, hidden_dim)
+        dist = self.forward_fc(o)
+        return dist
+            
+    def forward_fc(self, h_n):
+        """ 
+
+        Run the hidden states through the forward layer to obtain outputs. 
+
+        Args: 
+
+            h_n (torch tensor): (B, hidden_dim) or (B, K, hidden_dim) tensor of hidden state values at 
+                each point in each sequence. 
+
+        Returns: 
+            dist (torch.Distribution): (B,K*ydim) predictive distribution over next K observations shaped
+
+        """ 
+        outputs = self.fc(h_n)
+
+        if len(outputs.shape) == 3:
+            
+            # called from m2m
+            B, K, outdims = outputs.shape
+            outputs = outputs.reshape(B*K,-1)
+            mu = outputs[:,:self._num_means]
+            sig = torch.exp(outputs[:,self._num_means:])
+            mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
+            dist = D.Normal(loc=mu.reshape(B,-1), scale=sig.reshape(B,-1))
+            return dist
+        
+        # called normally
+        B, outdims = outputs.shape
+        mu = outputs[:,:self._num_means]
+        mu = torch.clamp(mu, min=self.clamp_min, max=self.clamp_max)
+
+        
+        # isotropic normal distribution
+        elif self.covariance_type == 'diagonal':
+            sig = torch.exp(outputs[:,self._num_means:])
+            sig = torch.clamp(sig, min=self.sig_eps, max=self.clamp_max)
+            dist = D.Normal(loc=mu, scale=sig)
+        
+        return dist

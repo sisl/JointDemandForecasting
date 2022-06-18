@@ -29,6 +29,26 @@ def nll(dist, target):
     nll = nlls.mean()
     return nll, nlls
 
+def pinball(preds, target, quantiles):
+    """
+    Compute Pinball loss given predictions, targets, and quantiles
+
+    Args: 
+        preds (torch.tensor): (B, K, n_quantiles) predictive quantiles over next K steps
+        target (torch tensor): (B, K, 1) tensor of true data labels.
+        quantiles (torch.tensor): (n_quantiles) tensor of fraction of each quartile
+
+    Returns: 
+        loss (float): pinball loss
+        losses (torch.tensor): (B) pinball loss of each sample in batch
+    """
+    diff = target - preds # (B, K, n_quantiles)
+    q = quantiles.unsqueeze(0).unsqueeze(0) #(1, 1, n_quantiles)
+    pinball = torch.maximum((q-1)*diff, q*diff) # (B, K, n_quantiles)
+    losses = pinball.mean((1,2)) # (B)
+    loss = losses.mean()
+    return loss, losses
+
 # training functions
 def train(model, dataset, 
     epochs:int=20, 
@@ -61,7 +81,7 @@ def train(model, dataset,
         epoch_loss = 0
         for batch in train_loader:
             optimizer.zero_grad()
-            
+
             dist = model.forward_m2m(batch['x'], batch['y']) if m2m else model(batch['x'])
             loss, _ = nll(dist, batch['y'][:,:model.K])
             loss.backward()
@@ -85,6 +105,67 @@ def train(model, dataset,
             if ray:
                 tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss)
             
+def train_pinball(model, dataset, 
+    epochs:int=20, 
+    optimizer = torch.optim.Adam,
+    learning_rate:float=0.01,
+    batch_size:int=64,
+    val_every:int=10,
+    m2m:bool=False,
+    ray:bool=False):
+    """ 
+    Train a regular model. 
+
+    Args: 
+        model: pytorch model to train.
+        dataset
+        num_epochs (int): number of times to iterate through all batches
+        optimizer (object): torch optimizer
+        learning_rate (float): learning rate for Adam optimizer
+        val_every (int): logging interval
+        m2m (bool): whether to run forward passes many-to-many
+        ray (bool): whether to log metrics with ray
+    """  
+    optimizer = optimizer(model.parameters(), lr=learning_rate)
+    
+    train_loader = DataLoader(dataset['train'], batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(dataset['val'], batch_size=batch_size)
+
+    # train the model
+    for i in range(epochs):
+        epoch_loss = 0
+        for batch in train_loader:
+            optimizer.zero_grad()
+            if m2m:
+                raise NotImplementedError
+            else:
+                preds = model.forward_quantiles(batch['x']).unsqueeze(1)
+            loss, _ = pinball(preds, batch['y'][:,:model.K], model.quantiles)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()*len(batch['x'])
+        epoch_loss /= len(dataset['train'])
+
+        # validate and log scores
+        if (i+1) % val_every == 0:
+            with torch.no_grad():
+                val_loss = 0
+                for batch in val_loader:
+                    if m2m:
+                        raise NotImplementedError
+                    else:
+                        vpreds = model.forward_quantiles(batch['x']).unsqueeze(1)
+                    vloss, _ = pinball(vpreds, batch['y'][:,:model.K], model.quantiles)
+                    val_loss += vloss.item()*len(batch['x'])
+                val_loss /= len(dataset['val'])
+
+            logger.info(f"Iter: {i+1}/{epochs}\t" +
+                "Train Loss: %1.4f\t" %(epoch_loss) +
+                "Val Loss: %1.4f\t" %(val_loss))
+            if ray:
+                tune.report(epoch=i+1,train_loss=epoch_loss, val_loss=val_loss)
+
+
 def train_mogp(model, dataset, 
     epochs=40,
     optimizer = torch.optim.Adam, 
