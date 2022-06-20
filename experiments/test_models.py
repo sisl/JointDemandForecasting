@@ -152,6 +152,7 @@ def calc_metrics(samples, test_y):
         metrics = {
             'WAPE': wape(samples,test_y, sampled=True)[0].item(), 
             'RWSE': rwse(samples,test_y, sampled=True)[0].item(),
+            'QS': quantile_score(samples, test_y)[0].item(),
             #nlls.append(nll(dist,Y_test)[0])
             #trnlls.append(nll(dist_tr,Y_train)[0])
             'DScore':index_allocation(samples, min_indices, obj_fn, test_y, 0.8).item(),
@@ -169,8 +170,8 @@ def train_test(config,
     
     assert None not in [model_name, dataset, loc, past_dims, fut_dims]
     # get dataset and config
+    
     dataset = load_data(dataset, past_dims, fut_dims, loc=loc, split_test=split_test)
-
     mogp_data = {
         d:{
             l:dataset[d][:][l].reshape(len(dataset[d][:][l]),-1).contiguous() for l in ['x','y',]

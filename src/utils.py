@@ -167,6 +167,33 @@ def rwse(dist, target, n=1000, sampled=False):
     rwse = torch.mean(wse_mean)**0.5
     return rwse, wse_mean, wse_std
 
+def quantile_score(samples, target, dq:float=0.05):
+    """
+    Generate the quantile score (aka pinball loss) from samples by sorting them to make 'quantiles'
+    
+    Args:
+        samples (torch.tensor):  (n, B, K*ydim) tensor of samples
+        target (torch.tensor): (B, K, ydim) tensor of true data labels.
+        dq (float): increment at which to measure quantiles
+
+    Returns:
+        qs (float): quantile score
+        qs_mean (torch.tensor): (K*ydim) qs along each output dimension
+    """
+    n, B, K = samples.shape
+    assert target.shape[-1] == 1, "improper target data dim"
+    samples,_ = torch.sort(samples, dim=0) 
+    quantiles = torch.arange(dq,1,dq) # (nq, )
+    indices = (n*quantiles).long()
+    preds = samples[indices] # (nq, B, K*ydim)
+    preds = torch.permute(preds,(1,2,0))
+    diff = target - preds # (B, K, n_quantiles)
+    q = quantiles.unsqueeze(0).unsqueeze(0) #(1, 1, n_quantiles)
+    pinball = torch.maximum((q-1)*diff, q*diff) # (B, K, n_quantiles)
+    qs_mean = pinball.mean((0,2)) # (K)
+    qs = qs_mean.mean()
+    return qs, qs_mean
+
 def sample_forward(model, y, prediction_horizon, n_samples=1000):
     """
     Iteratively sample forward from a model in batch
