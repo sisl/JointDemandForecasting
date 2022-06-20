@@ -16,7 +16,7 @@ from functools import partial
 BASEPATH = os.path.dirname(os.path.abspath(__file__))
 
 MODELS = ['ARMA', 'IFNN', 'IRNN', 'CG', 'JFNN', 'JRNN', 'MOGP', 'CGMM', 'CANF', 
-    'EncDec', 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec']
+    'EncDec', 'ResNN','QResPinb', 'QRNNPinb', 'QRNNDecPinb']
 DATASETS=['openei', 'nau', 'iso-ne1', 'iso-ne2', 'iso-ne3', 'iso-ne4']
 #        kernels = {'rbf': gpytorch.kernels.RBFKernel(),
 #           'ind_rbf': gpytorch.kernels.RBFKernel(ard_num_dims=past_dims),
@@ -45,7 +45,7 @@ def initialize_model(
     elif model_name=='ResNN':
         model = GaussianResnet(1, past_dims, 1, 1, **model_kwargs)
     
-    elif model_name in ['QRes','QResPinb']:
+    elif model_name in ['QResPinb']:
         model = QuantileResnet(1, past_dims, 1, 1, **model_kwargs)
 
     elif model_name in ['IRNN','EncDec']:
@@ -55,7 +55,7 @@ def initialize_model(
         else:
             model = GaussianMixtureLSTM(1, 1, 1, **model_kwargs)
 
-    elif model_name in ['QRNN', 'QRNNPinb','QRNNDec']:
+    elif model_name in ['QRNNPinb','QRNNDecPinb']:
         model = QuantileLSTM(1, 1, 1, **model_kwargs)
 
     elif model_name=='CG':
@@ -98,7 +98,6 @@ def train_model(
     mogp_data:Optional[Dict[str, torch.Tensor]]=None,
     **train_kwargs):
     
-    # 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec'
 
     # train models
     if model_name in ['ARMA', 'CG', 'CGMM']:
@@ -107,9 +106,6 @@ def train_model(
     elif model_name in ['IFNN','IRNN','JFNN','JRNN','EncDec', 'ResNN']:
         train(model, dataset, **train_kwargs)
     
-    elif model_name in ['QRes', 'QRNN', 'QRNNDec']:
-        raise Exception('NLL not working for quantile models')
-
     elif model_name in ['QResPinb','QRNNPinb','QRNNDecPinb']:
         train_pinball(model, dataset, **train_kwargs)
 
@@ -125,32 +121,29 @@ def train_model(
     return model
 
 def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000):
-    fut_dims = dataset['y'].shape[1]
+    B, fut_dims, O = dataset['y'].shape
     model.eval()
 
-    if model_name in ['ARMA','IFNN','ResNN','QRes','QResPinb']:
-        samples = sample_forward(model, dataset['x'], fut_dims, n_samples=n_samples)
-    
-    elif model_name in ['IRNN','EncDec','QRNN','QRNNPinb','QRNNDec']:
-        samples = sample_forward_lstm(model, dataset['x'], fut_dims, n_samples=n_samples)
-    
-    elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM']:
-        samples = model(dataset['x']).sample((n_samples,))
+    idx_list = np.array_split(np.arange(B), B//200) # cut down test batch into smaller batches of size ~200
+    samples = torch.zeros(n_samples, B, fut_dims*O)
+    for idxs in idx_list:
+        if model_name in ['ARMA','IFNN','ResNN','QResPinb']:
+            samples[:,idxs] = sample_forward(model, dataset['x'][idxs], fut_dims, n_samples=n_samples)
 
-    elif model_name=='MOGP':
-        assert mogp_data is not None, "No train_x, train_y passed"     
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            samples = model(mogp_data['x']).sample(torch.Size([n_samples]))
-    
-    elif model_name=='CANF':
-        dist = model(dataset['x'])
-        samples = []
-        for _ in range(n_samples//200):
-            s = dist.sample((200,))
-            samples.append(s) 
-        samples = torch.cat(samples,0)
-    else:
-        raise NotImplementedError
+        elif model_name in ['IRNN','EncDec','QRNNPinb','QRNNDecPinb']:
+            samples[:,idxs] = sample_forward_lstm(model, dataset['x'][idxs], fut_dims, n_samples=n_samples)
+
+        elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM','CANF']:
+            samples[:,idxs] = model(dataset['x'][idxs]).sample((n_samples,))
+
+        elif model_name=='MOGP':
+            assert mogp_data is not None, "No train_x, train_y passed"     
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                samples[:,idxs] = model(mogp_data['x'][idxs]).sample(torch.Size([n_samples]))
+
+        else:
+            raise NotImplementedError
+
     return samples
 
 def calc_metrics(samples, test_y):

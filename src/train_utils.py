@@ -137,9 +137,9 @@ def train_pinball(model, dataset,
         for batch in train_loader:
             optimizer.zero_grad()
             if m2m:
-                raise NotImplementedError
+                preds = model.forward_quantiles(batch['x'], y=batch['y'])
             else:
-                preds = model.forward_quantiles(batch['x']).unsqueeze(1)
+                preds = model.forward_quantiles(batch['x'])
             loss, _ = pinball(preds, batch['y'][:,:model.K], model.quantiles)
             loss.backward()
             optimizer.step()
@@ -152,9 +152,9 @@ def train_pinball(model, dataset,
                 val_loss = 0
                 for batch in val_loader:
                     if m2m:
-                        raise NotImplementedError
+                        vpreds = model.forward_quantiles(batch['x'], y=batch['y'])
                     else:
-                        vpreds = model.forward_quantiles(batch['x']).unsqueeze(1)
+                        vpreds = model.forward_quantiles(batch['x'])
                     vloss, _ = pinball(vpreds, batch['y'][:,:model.K], model.quantiles)
                     val_loss += vloss.item()*len(batch['x'])
                 val_loss /= len(dataset['val'])
