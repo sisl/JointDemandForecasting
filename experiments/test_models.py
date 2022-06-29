@@ -245,7 +245,8 @@ if __name__=='__main__':
     if args.ray: # Main training / testing scripts
         
         # path to best config
-        results_path = os.path.join(BASEPATH,'results',args.dataset,
+        dataname = args.dataset if args.loc==0 else f'{args.dataset}-{args.loc}'
+        results_path = os.path.join(BASEPATH,'results', dataname, 
             f'in{args.input}_out{args.output}_valontest{args.val_on_test}',args.model)
 
         if args.train: # get hyperparameter sweep ray config

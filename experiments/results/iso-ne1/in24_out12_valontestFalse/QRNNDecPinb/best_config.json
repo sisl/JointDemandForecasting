@@ -1,0 +1,1 @@
+{"seed": 2, "model": {"hidden_dim": 40, "fc_hidden_layers": 3, "fc_hidden_dims": 16, "n_quantiles": 7, "random_start": false}, "train": {"epochs": 100, "learning_rate": 0.005, "batch_size": 64, "m2m": true}}
