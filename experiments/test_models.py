@@ -11,7 +11,7 @@ from experiments.charging_utils import *
 from experiments.data_utils import load_data
 from experiments.get_config import get_config, get_config_ray
 from src.models import *
-from typing import Optional, Dict
+from typing import Optional, Dict,  List
 from functools import partial
 BASEPATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -121,43 +121,97 @@ def train_model(
     return model
 
 def generate_samples(model_name, model, dataset, mogp_data=None, n_samples=1000):
+    """
+    Generate samples from minibatches of data
+    """
+    
     B, fut_dims, O = dataset['y'].shape
     model.eval()
 
-    idx_list = np.array_split(np.arange(B), B//200) # cut down test batch into smaller batches of size ~200
-    samples = torch.zeros(n_samples, B, fut_dims*O)
-    for idxs in idx_list:
-        if model_name in ['ARMA','IFNN','ResNN','QResPinb']:
-            samples[:,idxs] = sample_forward(model, dataset['x'][idxs], fut_dims, n_samples=n_samples)
+    if model_name in ['ARMA','IFNN','ResNN','QResPinb']:
+        samples = sample_forward(model, dataset['x'], fut_dims, n_samples=n_samples)
 
-        elif model_name in ['IRNN','EncDec','QRNNPinb','QRNNDecPinb']:
-            samples[:,idxs] = sample_forward_lstm(model, dataset['x'][idxs], fut_dims, n_samples=n_samples)
+    elif model_name in ['IRNN','EncDec','QRNNPinb','QRNNDecPinb']:
+        samples = sample_forward_lstm(model, dataset['x'], fut_dims, n_samples=n_samples)
 
-        elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM','CANF']:
-            samples[:,idxs] = model(dataset['x'][idxs]).sample((n_samples,))
+    elif model_name in ['CG', 'JFNN', 'JRNN', 'CGMM','CANF']:
+        samples = model(dataset['x']).sample((n_samples,))
 
-        elif model_name=='MOGP':
-            assert mogp_data is not None, "No train_x, train_y passed"     
-            with torch.no_grad(), gpytorch.settings.fast_pred_var():
-                samples[:,idxs] = model(mogp_data['x'][idxs]).sample(torch.Size([n_samples]))
+    elif model_name=='MOGP':
+        assert mogp_data is not None, "No train_x, train_y passed"     
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            samples = model(mogp_data['x']).sample(torch.Size([n_samples]))
 
-        else:
-            raise NotImplementedError
+    else:
+        raise NotImplementedError
 
     return samples
 
-def calc_metrics(samples, test_y):
-        min_indices = 4
-        obj_fn = lambda x: var(x, 0.8)
-        metrics = {
-            'WAPE': wape(samples,test_y, sampled=True)[0].item(), 
-            'RWSE': rwse(samples,test_y, sampled=True)[0].item(),
-            'QS': quantile_score(samples, test_y)[0].item(),
+def calc_metrics(model_name, model, dataset, mogp_data=None, n_samples=1000, batch_size=200):
+    """
+    Calculate metrics in minibatches and aggregate them
+    """
+    # batch datasets - use indices rather than dataloader because of mogp data
+    B = len(dataset)
+    idx_list = np.array_split(np.arange(B), B//batch_size)
+    
+    # iterate over batches
+    batched_metrics, batch_sizes = [], []
+    for idxs in idx_list:
+        batch = dataset[idxs]
+        mogp_data_batch = None
+        if mogp_data is not None:
+            mogp_data_batch = {l:mogp_data[l][idxs] for l in ['x','y']}
+
+        # generate samples
+        samples = generate_samples(model_name, model, batch, mogp_data=mogp_data_batch, n_samples=1000)
+        
+        # generate batched metrics
+        batched_metrics.append({
+            'WAPE': wape(samples, batch['y'], sampled=True)[0].item(), 
+            'RWSE': rwse(samples, batch['y'], sampled=True)[0].item(),
+            'QS': quantile_score(samples, batch['y'])[0].item(),
             #nlls.append(nll(dist,Y_test)[0])
             #trnlls.append(nll(dist_tr,Y_train)[0])
-            'DScore':index_allocation(samples, min_indices, obj_fn, test_y, 0.8).item(),
-        }
-        return metrics
+            'DScore':index_allocation(samples, 4, lambda x: var(x, 0.8), batch['y'], 0.8).item(),
+        })
+        batch_sizes.append(len(batch))
+
+    metrics = {}
+    for key in batched_metrics[0].keys():
+        if key == 'RWSE': # rws combine
+            metrics[key] = rws_combine([m[key] for m in batched_metrics], batch_sizes)
+        else: # mean combine
+            metrics[key] = mean_combine([m[key] for m in batched_metrics], batch_sizes)
+    return metrics
+
+def rws_combine(batch_metrics:List[float], batch_sizes:List[int]):
+    """
+    Combine metrics that need to be root-weighted-squared
+    Args:
+        batch_metrics (List[float]): list of float metrics
+        batch_sizes (List[int]): list of batch sizes
+    Returns:
+        metric (float): averaged metric
+    """
+    x, lens = np.array(batch_metrics), np.array(batch_sizes)
+    wsquares = x**2 * lens
+    metric = (np.sum(wsquares)/np.sum(lens)) ** 0.5
+    return metric
+
+def mean_combine(batch_metrics:List[float], batch_sizes:List[int]):
+    """
+    Combine metrics by weighted mean
+    Args:
+        batch_metrics (List[float]): list of float metrics
+        batch_sizes (List[int]): list of batch sizes
+    Returns:
+        metric (float): averaged metric
+    """
+    x, lens = np.array(batch_metrics), np.array(batch_sizes)
+    wmeans = x * lens
+    metric = np.sum(wmeans) /np.sum(lens)
+    return metric
 
 def train_test(config, 
     model_name=None,
@@ -169,8 +223,9 @@ def train_test(config,
     split_test=True):
     
     assert None not in [model_name, dataset, loc, past_dims, fut_dims]
-    # get dataset and config
+    print(f'Running {model_name} on {dataset}-{loc} for {fut_dims} given {past_dims} and split_test {split_test}')
     
+    # get dataset and config
     dataset = load_data(dataset, past_dims, fut_dims, loc=loc, split_test=split_test)
     mogp_data = {
         d:{
@@ -185,15 +240,19 @@ def train_test(config,
     set_seed(seed)
 
     # define model
+    print('Initializing model')
     model = initialize_model(model_name, past_dims, fut_dims, mogp_data=mogp_data, **config['model'])
 
     # train
+    print('Training model')
     train_model(model_name, model, dataset, mogp_data=mogp_data, ray=ray, **config['train'])
     
     # Generate val and test metrics 
     metrics = {}
     for data_type in ['val', 'test']:
-    
+        print(f'Generating {data_type} metrics')
+
+        """
         # gen samples
         samples = generate_samples(model_name, model, dataset[data_type][:], 
             n_samples=1000, 
@@ -201,14 +260,24 @@ def train_test(config,
 
         # get and print metrics
         _met = calc_metrics(samples, dataset[data_type][:]['y'])
+        """
+
+        # calculate metrics
+        _met = calc_metrics(model_name, model, dataset[data_type],
+            n_samples=1000,
+            mogp_data=mogp_data[data_type] if mogp_data is not None else None)
+
         metrics.update({f'{data_type}_{key}': value for key, value in _met.items()})
-    
+
+    # print metrics and report if ray
+    print(f'{model_name} Metrics:')
+    for key in metrics.keys():
+        print(f'{key}: {metrics[key]}')
+
     if ray:
         tune.report(**metrics)
-    else:
-        print(f'{model_name} Metrics:')
-        for key in metrics.keys():
-            print(f'{key}: {metrics[key]}')
+        with open('metrics.json', 'w') as fp:
+            json.dump(metrics, fp)
 
 # print(f'{model_name} Metrics:')
 #for metric_key in metrics_all[0].keys():
@@ -267,7 +336,9 @@ if __name__=='__main__':
                 fut_dims=args.output,  
                 ray=args.ray,
                 split_test=not args.val_on_test), 
-            config=config, resources_per_trial={"cpu":args.cpus_per_trial})
+            config=config, 
+            resources_per_trial={"cpu":args.cpus_per_trial},
+            log_to_file='out.log')
 
         if args.train: # save best config file
             best_config = analysis.get_best_config('val_RWSE','min')

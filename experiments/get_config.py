@@ -3,7 +3,7 @@ from ray import tune
 #     'EncDec', 'ResNN', 'QRes','QResPinb', 'QRNN', 'QRNNPinb', 'QRNNDec']
 
 def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
-    config = {'seed':tune.grid_search(list(range(nseeds))), 'model':{}, 'train':{}}    
+    config = {'model_name': model_name, 'seed':tune.grid_search(list(range(nseeds))), 'model':{}, 'train':{}}    
     if model_name=='ARMA':
         pass
     
@@ -133,7 +133,7 @@ def get_config_ray(model_name:str, loc, past_dims, fut_dims, nseeds):
     return config
 
 def get_config(model_name:str, loc, past_dims, fut_dims):
-    config = {'seed':0, 'model':{}, 'train':{}}    
+    config = {'model_name': model_name, 'seed':0, 'model':{}, 'train':{}}    
     if model_name=='ARMA':
         pass
     
