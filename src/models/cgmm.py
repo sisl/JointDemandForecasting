@@ -78,7 +78,7 @@ class ConditionalGMM(nn.Module):
         dist = D.MixtureSameFamily(mix, comp)
         return dist
    
-    def fit(self, y, y_future, attempts:int=1):
+    def fit(self, y, y_future, u=None, attempts:int=1):
         """ 
 
         Fit model given data of past and future observations
@@ -86,6 +86,7 @@ class ConditionalGMM(nn.Module):
         Args:
             y (torch.tensor): (B, T, ydim) past observations
             y_future (torch.tensor): (B, K, ydim) future observations conditioned on past observations
+            u (torch.tensor or None): (B, T+K, udim) inputs corresponding with past observations
             attempts (int): number of times to attempt to fit cgmm (since it can be unstable)
         """
         device = torch.device("cuda" if y.is_cuda else "cpu")
